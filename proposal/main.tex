@@ -44,7 +44,7 @@ Sharif University of Technology\\
 \maketitle
 
 \begin{abstract}
-Radiology report generation and interpretation are critical yet time-consuming tasks in clinical workflows. Recent advances in vision-language models (VLMs), particularly contrastive learning approaches like CLIP, have demonstrated promising capabilities for zero-shot medical image classification and cross-modal retrieval. However, significant challenges remain: (1) factual hallucination in generated reports, where models produce clinically incorrect findings; (2) limited cross-institutional robustness, with performance degradation on external datasets; and (3) lack of uncertainty quantification for clinical deployment. This research proposes a comprehensive study of VLMs for radiology, focusing on three interconnected tasks: zero-shot pathology classification, image-text retrieval, and factuality-aware report generation. Building on CheXzero and R2Gen as foundational architectures, we propose novel extensions incorporating uncertainty quantification, RadGraph-based factuality constraints, and systematic cross-dataset evaluation. Using publicly available datasets (IU X-Ray, NIH ChestX-ray14), we aim to develop methods that advance both technical performance and clinical deployability. This work is designed as a graduate course project with clear pathways to publication at MICCAI, MIDL, or related venues, addressing critical gaps in medical AI research.
+Radiology report generation and interpretation are critical but increasingly burdensome tasks in modern clinical workflows. While recent vision-language models (VLMs) like CLIP have shown promise for zero-shot medical image classification, they still struggle with three major hurdles: factual hallucinations in generated reports, poor robustness when tested on data from different hospitals, and a lack of reliable uncertainty estimates for clinical decision-making. This project explores how we can make these models more trustworthy and practical for real-world use. We build upon the CheXzero and R2Gen architectures to develop three key improvements: (1) uncertainty-aware classification using Monte Carlo Dropout and conformal prediction, (2) factuality-constrained report generation guided by RadGraph supervision, and (3) a systematic evaluation of cross-dataset robustness using the IU X-Ray and NIH ChestX-ray14 datasets. Our goal is to move beyond simple performance metrics and address the fundamental gaps that prevent medical AI from being safely deployed in clinics.
 \end{abstract}
 
 \tableofcontents
@@ -56,73 +56,40 @@ Radiology report generation and interpretation are critical yet time-consuming t
 
 \subsection{Clinical Motivation}
 
-Radiology is the cornerstone of modern medical diagnosis, with over 3 billion imaging studies performed annually worldwide. Each chest X-ray examination requires expert interpretation to detect pathologies ranging from common conditions (pneumonia, pleural effusion) to life-threatening emergencies (pneumothorax, aortic dissection). However, the radiology workforce faces unprecedented challenges:
+Radiology is at the heart of modern diagnosis, with billions of imaging studies performed every year. In particular, chest X-rays are the most common imaging modality, used to detect everything from routine pneumonia to life-threatening emergencies like pneumothorax. However, the field is currently facing a "perfect storm" of challenges. There is a global shortage of radiologists, while imaging volumes continue to grow at 5-10\% annually. This leads to burnout and, inevitably, diagnostic errors—studies suggest error rates of 3-5\% in routine interpretations.
 
-\begin{itemize}
-    \item \textbf{Global radiologist shortage:} The World Health Organization estimates a deficit of over 2 million radiologists globally, particularly severe in low- and middle-income countries.
-    \item \textbf{Increasing imaging volumes:} Annual growth rate of 5-10\% in imaging studies outpaces radiologist training capacity.
-    \item \textbf{Diagnostic errors:} Studies report 3-5\% error rates in radiology interpretation, with significant consequences for patient outcomes.
-    \item \textbf{Workflow inefficiencies:} Radiologists spend 60-70\% of their time on report writing rather than complex diagnostic reasoning.
-\end{itemize}
-
-Artificial intelligence, specifically deep learning for medical image analysis, has emerged as a promising solution. Early successes in classification tasks (e.g., CheXNet achieving radiologist-level pneumonia detection) demonstrated technical feasibility. However, clinical translation remains limited due to fundamental challenges in trustworthiness, generalizability, and practical deployment.
+Perhaps most importantly, radiologists today spend a disproportionate amount of their time—often 60-70\%—on the repetitive task of report writing rather than complex diagnostic reasoning. While early AI successes like CheXNet showed that models could achieve radiologist-level performance on specific classification tasks, they haven't yet transformed clinical practice. This is because a "black-box" classifier that only outputs a disease label isn't enough; we need models that can explain their reasoning, admit when they are uncertain, and generate accurate, human-readable reports.
 
 \subsection{The Promise of Vision-Language Models}
 
-Recent advances in vision-language models (VLMs) offer a paradigm shift from traditional supervised learning. Instead of requiring thousands of manually labeled examples per disease, VLMs learn joint representations of images and text through self-supervised contrastive learning on naturally occurring image-report pairs. This approach provides several advantages:
+Vision-language models (VLMs) represent a shift away from traditional supervised learning. Instead of needing thousands of manually labeled images for every single disease, VLMs learn by "reading" existing radiology reports alongside their corresponding images. This self-supervised approach is much closer to how a human resident learns—by observing the relationship between visual findings and clinical descriptions.
+
+This approach offers several key advantages. First, it enables \textbf{zero-shot learning}, allowing models to identify new pathologies they weren't explicitly trained on just by using text descriptions. Second, it is highly \textbf{data-efficient}, leveraging the vast amount of unlabeled data already present in hospital archives. Finally, it provides a \textbf{unified framework} for multiple tasks, from classification and retrieval to full report generation, all within a single model.
+
+\subsection{Why Current Models Aren't Ready for the Clinic}
+
+Despite the excitement around models like CheXzero and GLORIA, several critical gaps remain that make them risky for clinical use:
 
 \begin{enumerate}
-    \item \textbf{Zero-shot learning:} Models can classify new diseases without disease-specific training data, using only text descriptions.
-    \item \textbf{Data efficiency:} Self-supervised pretraining on unlabeled image-text pairs reduces annotation burden.
-    \item \textbf{Unified framework:} Single model supports multiple tasks (classification, retrieval, generation).
-    \item \textbf{Interpretability:} Text grounding provides clinically meaningful explanations.
+    \item \textbf{Factual Hallucinations:} Models often generate reports that sound fluent but are clinically wrong. They might describe a "fracture" that isn't there or miss a critical finding like a collapsed lung. Standard metrics like BLEU or ROUGE are useless here because they measure linguistic similarity, not clinical truth.
+    \item \textbf{Cross-Institutional Brittleness:} A model trained at one hospital often fails when tested at another. Differences in scanners, patient populations, and even reporting styles can cause performance to drop significantly.
+    \item \textbf{The "Black Box" Problem:} Most models provide a single prediction without any sense of how confident they are. In medicine, knowing \textit{when} to trust a model is just as important as the prediction itself.
+    \item \textbf{Evaluation Misalignment:} We are still using metrics designed for machine translation (like BLEU) to evaluate medical reports. These metrics correlate poorly with actual clinical utility.
 \end{enumerate}
-
-Models like CLIP (Contrastive Language-Image Pre-training) have revolutionized natural image understanding. Medical adaptations—CheXzero, GLORIA, BioViL—demonstrate that similar principles apply to radiology, achieving expert-level performance on pathology detection tasks.
-
-\subsection{Critical Research Gaps}
-
-Despite promising results, current medical VLMs face severe limitations that impede clinical deployment:
-
-\textbf{Gap 1: Factual Hallucination}\\
-VLMs trained on report generation frequently produce fluent but clinically incorrect text. A model might generate "fracture of the left 4th rib" when no fracture exists, or omit critical findings like pneumothorax. Traditional NLG metrics (BLEU, ROUGE) fail to detect these errors, as they measure linguistic similarity, not clinical accuracy.
-
-\textbf{Gap 2: Cross-Institutional Brittleness}\\
-Models trained on single-institution data (e.g., MIMIC-CXR from Beth Israel Deaconess) show performance degradation of 5-15\% AUROC when tested on external hospitals. Contributing factors include equipment differences, population demographics, and reporting style variations.
-
-\textbf{Gap 3: Lack of Uncertainty Quantification}\\
-Clinical decisions require knowing when a model is uncertain. Current VLMs produce point predictions without confidence estimates, making it impossible to identify out-of-distribution cases or defer to human experts appropriately.
-
-\textbf{Gap 4: Limited Grounding}\\
-Many models fail to link generated findings to image regions. Without visual evidence for each claim, radiologists cannot verify model outputs or understand failure modes.
-
-\textbf{Gap 5: Evaluation Misalignment}\\
-Standard metrics (BLEU, ROUGE) correlate poorly (r=0.3) with clinical utility. Emerging alternatives like RadGraph F1 and CheXbert accuracy better capture clinical correctness but remain underutilized in training objectives.
 
 \subsection{Research Objectives}
 
-This project aims to address these gaps through three primary objectives:
+This project aims to tackle these issues head-on. We have defined three primary objectives:
 
-\textbf{Objective 1: Develop uncertainty-aware zero-shot classification}\\
-Extend CheXzero with Monte Carlo Dropout and conformal prediction to provide calibrated confidence intervals, enabling appropriate human-AI collaboration.
-
-\textbf{Objective 2: Create factuality-constrained report generation}\\
-Integrate RadGraph-based supervision into R2Gen training, penalizing entity hallucination and rewarding grounded generation.
-
-\textbf{Objective 3: Establish cross-dataset robustness benchmarks}\\
-Systematically evaluate model performance across multiple public datasets (IU X-Ray, NIH ChestX-ray14), analyze failure modes, and propose domain adaptation techniques.
+\begin{itemize}
+    \item \textbf{Objective 1: Uncertainty-Aware Classification.} We will extend the CheXzero architecture to provide calibrated confidence intervals. By using Monte Carlo Dropout and conformal prediction, we want the model to "know what it doesn't know," enabling safer human-AI collaboration.
+    \item \textbf{Objective 2: Factuality-Constrained Generation.} We will integrate RadGraph-based supervision into the R2Gen training process. Instead of just matching words, the model will be penalized for hallucinating clinical entities or relations.
+    \item \textbf{Objective 3: Robustness Benchmarking.} We will perform a systematic cross-dataset evaluation between IU X-Ray and NIH ChestX-ray14 to understand where these models fail and how we can make them more robust to domain shift.
+\end{itemize}
 
 \subsection{Scope and Constraints}
 
-This project focuses on \textbf{publicly available resources only}:
-\begin{itemize}
-    \item \textbf{Datasets:} IU X-Ray (3,955 studies), NIH ChestX-ray14 (112,120 images)
-    \item \textbf{Modality:} Chest X-ray (frontal view)
-    \item \textbf{Tasks:} Classification, retrieval, report generation
-    \item \textbf{Compute:} Single GPU experiments (NVIDIA V100 or A100)
-\end{itemize}
-
-While MIMIC-CXR (227K studies) offers larger scale, its credentialing requirements and 1-2 week access delay make it impractical for an 8-month course project. Our approach demonstrates that meaningful research contributions are possible with smaller, fully public datasets by focusing on methodological innovation rather than scale.
+We are focusing exclusively on \textbf{publicly available resources}. While larger datasets like MIMIC-CXR exist, their credentialing requirements make them impractical for a course project. We believe that meaningful research contributions can be made by focusing on methodological innovation—like factuality and uncertainty—rather than just scaling up the data. Our primary tools will be the IU X-Ray (3,955 studies) and NIH ChestX-ray14 (112,120 images) datasets.
 
 \subsection{Expected Contributions}
 
@@ -570,29 +537,20 @@ We acknowledge these limitations and will discuss generalization constraints in 
 
 \subsection{Overview}
 
-Our approach combines two foundational architectures:
+Our research strategy is built on two well-established architectures: \textbf{CheXzero} for zero-shot classification and \textbf{R2Gen} for report generation. Rather than reinventing the wheel, we focus on extending these models to address the critical gaps of uncertainty, factuality, and robustness.
 
+We have structured our work into three main extensions:
 \begin{enumerate}
-    \item \textbf{CheXzero} \cite{tiu2022chexzero}: Contrastive vision-language model for zero-shot classification and retrieval
-    \item \textbf{R2Gen} \cite{chen2020r2gen}: Memory-driven transformer for report generation
+    \item \textbf{Extension 1 (Classification):} Moving beyond point estimates to provide calibrated uncertainty using Monte Carlo Dropout and conformal prediction.
+    \item \textbf{Extension 2 (Generation):} Moving beyond word-matching to factual correctness by integrating RadGraph-based supervision into the training loop.
+    \item \textbf{Extension 3 (Robustness):} Moving beyond single-dataset evaluation to a systematic cross-dataset analysis between IU X-Ray and NIH-14.
 \end{enumerate}
 
-We propose three novel extensions addressing critical gaps:
-
-\begin{itemize}
-    \item \textbf{Extension 1 (Classification):} Uncertainty-aware zero-shot classification via Monte Carlo Dropout and conformal prediction
-    \item \textbf{Extension 2 (Generation):} Factuality-constrained report generation using RadGraph-based training loss
-    \item \textbf{Extension 3 (Robustness):} Cross-dataset evaluation protocol with systematic failure analysis
-\end{itemize}
-
-Each extension is designed to be:
-\begin{itemize}
-    \item \textbf{Feasible:} Implementable within 2-3 months on single GPU
-    \item \textbf{Novel:} Addresses underexplored research gap
-    \item \textbf{Publishable:} Sufficient contribution for MICCAI/MIDL workshop or conference paper
-\end{itemize}
-
 \subsection{Baseline: CheXzero for Zero-Shot Classification}
+
+CheXzero is our starting point for pathology detection. It uses a contrastive learning approach, similar to CLIP, but adapted for the medical domain. The model consists of a ResNet-50 image encoder and a BioClinicalBERT text encoder. During training, it learns to align images with their corresponding radiology reports in a shared embedding space.
+
+At test time, we can perform zero-shot classification by comparing an image's embedding to the embeddings of positive and negative prompts (e.g., "Findings consistent with pneumonia" vs. "No evidence of pneumonia"). This allows us to detect diseases without ever having seen a labeled example of that specific disease during training.
 
 \subsubsection{Architecture}
 
@@ -684,111 +642,19 @@ Pleural Effusion & 0.90-0.93 & 0.87-0.90 \\
 
 Performance drop on NIH-14 expected due to domain shift (single institution vs. NIH Clinical Center).
 
-\subsection{Extension 1: Uncertainty-Aware Classification}
+\subsection{Extension 1: Making Models "Know What They Don't Know"}
 
-\subsubsection{Motivation}
+One of the biggest dangers in medical AI is an overconfident model making a wrong prediction. We want our model to be able to say, "I'm not sure about this one." To achieve this, we are implementing two layers of uncertainty quantification.
 
-Clinical deployment requires knowing when model is uncertain. Current CheXzero produces deterministic scores without confidence estimates. Consequences:
-\begin{itemize}
-    \item Cannot defer ambiguous cases to human experts
-    \item Overconfident predictions on out-of-distribution data
-    \item Difficult to set operating points balancing sensitivity and specificity
-\end{itemize}
+First, we use \textbf{Monte Carlo Dropout}. By keeping dropout layers active during inference and running multiple forward passes, we can treat the variance in the model's outputs as a measure of its internal uncertainty. If the model gives wildly different answers across passes, it's a clear sign of low confidence.
 
-\textbf{Research Question:} Can we augment CheXzero with calibrated uncertainty estimates while maintaining zero-shot performance?
+Second, we apply \textbf{Conformal Prediction}. This is a powerful statistical framework that allows us to generate prediction sets with a guaranteed coverage rate (e.g., 95\%). Instead of just saying "Pneumonia," the model might output a set of possible findings. If the set is large, the model is uncertain. This provides a mathematically rigorous way to decide when a case should be flagged for human review.
 
-\subsubsection{Technical Approach}
+\subsection{Extension 2: Training for Factual Truth, Not Just Fluency}
 
-We propose two complementary methods:
+Current report generation models like R2Gen are often "too good" at sounding like a radiologist while getting the facts wrong. They learn the statistical patterns of language but not the underlying clinical reality. To fix this, we are moving away from standard cross-entropy loss, which only cares about matching the exact words of the reference report.
 
-\textbf{Method 1: Monte Carlo Dropout (MC Dropout)}
-
-\textbf{Idea:} Treat dropout as Bayesian approximation. At inference, enable dropout and perform $T$ forward passes:
-
-\begin{equation}
-\hat{p}(y_d=1|x) = \frac{1}{T} \sum_{t=1}^{T} \sigma(s_d^{(t)}(x))
-\end{equation}
-
-where $s_d^{(t)}(x)$ is classification score with dropout mask $t$, $\sigma$ is sigmoid.
-
-\textbf{Predictive Entropy (Uncertainty):}
-\begin{equation}
-H(y_d|x) = -\hat{p} \log \hat{p} - (1-\hat{p}) \log (1-\hat{p})
-\end{equation}
-
-High entropy $\rightarrow$ model uncertain $\rightarrow$ defer to radiologist.
-
-\textbf{Implementation:}
-\begin{itemize}
-    \item Add dropout (p=0.2) after penultimate layer of ResNet-50 and BERT
-    \item At inference: $T=20$ stochastic forward passes (overhead: 20$\times$ single pass)
-    \item Aggregate predictions: mean $\pm$ std
-\end{itemize}
-
-\textbf{Method 2: Conformal Prediction}
-
-\textbf{Idea:} Distribution-free confidence sets with coverage guarantees. Given calibration set $\mathcal{D}_{\text{cal}} = \{(x_i, y_i)\}$, construct prediction sets $C(x)$ such that:
-\begin{equation}
-\mathbb{P}(y \in C(x)) \geq 1 - \alpha
-\end{equation}
-for user-specified error rate $\alpha$ (e.g., 0.05 for 95\% coverage).
-
-\textbf{Procedure:}
-\begin{enumerate}
-    \item Compute non-conformity scores on calibration set: $R_i = |s_d(x_i) - y_i|$
-    \item Compute quantile: $q = \text{Quantile}(R_1, ..., R_m; 1-\alpha)$
-    \item For test image $x$: predict $\hat{y} \in [s_d(x) - q, s_d(x) + q]$
-\end{enumerate}
-
-\textbf{Advantages:}
-\begin{itemize}
-    \item Finite-sample coverage guarantee (not asymptotic)
-    \item No distributional assumptions
-    \item Fast calibration (single pass over calibration set)
-\end{itemize}
-
-\textbf{Disadvantage:} Requires held-out calibration set (use validation split).
-
-\subsubsection{Evaluation}
-
-\textbf{Metrics:}
-\begin{enumerate}
-    \item \textbf{Calibration:} Expected Calibration Error (ECE)
-    \begin{equation}
-    \text{ECE} = \sum_{m=1}^{M} \frac{|B_m|}{N} |\text{acc}(B_m) - \text{conf}(B_m)|
-    \end{equation}
-    where $B_m$ are bins of predicted confidence, $\text{acc}(B_m)$ is accuracy in bin, $\text{conf}(B_m)$ is average confidence.
-    
-    \item \textbf{Coverage:} For conformal prediction, verify empirical coverage $\geq 1-\alpha$.
-    
-    \item \textbf{Selective Prediction:} Reject fraction $f$ of most uncertain predictions. Plot accuracy vs. $f$. Goal: steep curve (rejecting few uncertain cases improves accuracy significantly).
-    
-    \item \textbf{Rare Disease Performance:} Test on rare diseases (Pneumothorax: 1.1\% in IU X-Ray). Do uncertainty estimates correlate with classification errors?
-\end{enumerate}
-
-\subsubsection{Expected Contributions}
-
-\begin{itemize}
-    \item First application of conformal prediction to medical VLMs
-    \item Demonstrate improved calibration (ECE reduction 20-30\%)
-    \item Show 10-15\% accuracy improvement by deferring 15\% most uncertain cases
-    \item Provide confidence intervals for zero-shot predictions
-\end{itemize}
-
-\textbf{Publication venue:} Radiology AI (clinical utility), MIDL (methodology)
-
-\subsection{Extension 2: Factuality-Constrained Report Generation}
-
-\subsubsection{Motivation}
-
-Report generation models frequently hallucinate findings:
-\begin{itemize}
-    \item Generate "fracture" when none exists
-    \item Omit critical findings like pneumothorax
-    \item Produce anatomically impossible descriptions
-\end{itemize}
-
-BLEU/ROUGE metrics fail to detect these errors. RadGraph F1 captures factuality but is typically used only for evaluation, not during training.
+Instead, we are integrating \textbf{RadGraph-based supervision}. RadGraph is a tool that parses radiology reports into knowledge graphs of clinical entities (like "opacity") and their relations (like "located in the left lower lobe"). By comparing the graph of the generated report to the graph of the ground truth, we can penalize the model for hallucinating findings or missing critical details. This forces the model to prioritize clinical accuracy over linguistic fluency.
 
 \textbf{Research Question:} Can we integrate RadGraph-based factuality loss into training to reduce hallucination?
 
@@ -901,156 +767,44 @@ where $\mathcal{L}_{\text{CheXbert}}$ is binary cross-entropy on 14 CheXpert lab
 
 \textbf{Publication venue:} MICCAI, EMNLP, TMI
 
-\subsection{Extension 3: Cross-Dataset Robustness Analysis}
+\subsection{Extension 3: Testing for Real-World Robustness}
 
-\subsubsection{Motivation}
+A model that works perfectly on IU X-Ray data might fail miserably when deployed at a different hospital. This "domain shift" is a major barrier to clinical adoption. We are conducting a systematic study to quantify this drop in performance.
 
-Most papers train and evaluate on single dataset. External validation rare. Unknown:
+We will train our models on the IU X-Ray dataset and then test them—without any further training—on the NIH ChestX-ray14 dataset. This will allow us to identify which diseases are most prone to generalization failure and whether our uncertainty estimates can correctly identify these out-of-distribution cases. We will also explore simple but effective techniques like Test-Time Augmentation (TTA) and few-shot fine-tuning to see how much of the performance gap we can recover.
+
+\section{Experimental Plan and Evaluation}
+
+Our experiments are designed to be rigorous and reproducible. We will use the standard splits for IU X-Ray and NIH-14 to ensure our results can be compared with existing literature.
+
+\subsection{Evaluation Metrics}
+
+We move beyond simple accuracy to use metrics that reflect clinical reality:
 \begin{itemize}
-    \item How much does performance degrade on other institutions?
-    \item Which diseases generalize well vs. poorly?
-    \item Are errors systematic (e.g., false positives on rare equipment artifacts)?
+    \item \textbf{Classification:} AUROC and AUPRC for pathology detection, with a focus on high-sensitivity operating points.
+    \item \textbf{Uncertainty:} Expected Calibration Error (ECE) to measure how well the model's confidence matches its accuracy.
+    \item \textbf{Generation:} RadGraph F1 and CheXbert accuracy to measure factual correctness, alongside traditional metrics like BLEU-4 for fluency.
 \end{itemize}
 
-\textbf{Research Question:} What is the cross-dataset robustness of medical VLMs, and can simple techniques improve generalization?
+\subsection{Implementation Details}
 
-\subsubsection{Experimental Protocol}
+All models will be implemented in PyTorch. We will use a single NVIDIA A100 or V100 GPU for training, which we estimate will take approximately 24-48 hours per major experiment. We will use BioClinicalBERT as our text encoder and ResNet-50/101 as our image encoders, following the original CheXzero and R2Gen papers.
 
-\textbf{Setup:}
-\begin{enumerate}
-    \item Train CheXzero on IU X-Ray (3,955 studies)
-    \item Test zero-shot on:
-    \begin{itemize}
-        \item IU X-Ray test set (in-distribution)
-        \item NIH ChestX-ray14 (out-of-distribution)
-    \end{itemize}
-    \item Measure AUROC, AUPRC, F1 per disease
-    \item Analyze failure modes: false positives, false negatives
-\end{enumerate}
+\section{Timeline and Milestones}
 
-\textbf{Hypotheses:}
+We have planned this project over a 6-month period:
 \begin{itemize}
-    \item \textbf{H1:} Performance drops 5-10\% AUROC on NIH-14 due to domain shift
-    \item \textbf{H2:} Rare diseases (Pneumothorax, Pneumonia) degrade more than common diseases (Cardiomegaly, Effusion)
-    \item \textbf{H3:} False positive rate increases on NIH-14 due to dataset-specific artifacts
+    \item \textbf{Month 1-2:} Environment setup, dataset preprocessing, and reproduction of baseline CheXzero and R2Gen results.
+    \item \textbf{Month 3:} Implementation of Extension 1 (Uncertainty Quantification).
+    \item \textbf{Month 4:} Implementation of Extension 2 (RadGraph-based Factuality Loss).
+    \item \textbf{Month 5:} Cross-dataset robustness analysis and domain adaptation experiments.
+    \item \textbf{Month 6:} Final analysis, error taxonomy, and manuscript preparation for submission to MICCAI or MIDL.
 \end{itemize}
 
-\subsubsection{Domain Adaptation Techniques}
+\section{Conclusion}
 
-\textbf{Baseline: No adaptation (zero-shot transfer)}
+This project is more than just a technical exercise in deep learning. By focusing on uncertainty, factuality, and robustness, we are addressing the core reasons why medical AI often fails to make the leap from the lab to the clinic. Our goal is to develop vision-language models that are not just accurate, but also trustworthy and useful for the radiologists who will eventually use them.
 
-\textbf{Technique 1: Test-Time Augmentation (TTA)}
-\begin{itemize}
-    \item Apply multiple augmentations (flip, rotate, crop) at test time
-    \item Average predictions: $\hat{y} = \frac{1}{K} \sum_{k=1}^{K} f(x_k)$
-    \item Expected improvement: +1-2\% AUROC (free, no retraining)
-\end{itemize}
-
-\textbf{Technique 2: Few-Shot Fine-Tuning}
-\begin{itemize}
-    \item Use 1\%, 5\%, 10\% of NIH-14 labeled data
-    \item Fine-tune classification head (freeze encoder or full model)
-    \item Plot: labeled data fraction vs. AUROC recovery
-\end{itemize}
-
-\textbf{Technique 3: Domain-Invariant Features}
-\begin{itemize}
-    \item Add domain classifier on intermediate features
-    \item Adversarial training: maximize task performance, minimize domain discrimination
-    \item Loss: $\mathcal{L} = \mathcal{L}_{\text{task}} - \lambda \mathcal{L}_{\text{domain}}$
-\end{itemize}
-
-\textbf{Technique 4: Ensemble}
-\begin{itemize}
-    \item Train multiple CheXzero models with different:
-    \begin{itemize}
-        \item Random seeds
-        \item Data augmentation strategies
-        \item Prompt templates
-    \end{itemize}
-    \item Aggregate predictions: majority vote or averaging
-    \item Expected: +2-3\% AUROC, better calibration
-\end{itemize}
-
-\subsubsection{Evaluation}
-
-\textbf{Quantitative Metrics:}
-\begin{itemize}
-    \item AUROC, AUPRC per disease
-    \item Mean AUROC across diseases (macro-average)
-    \item Performance drop: $\Delta = \text{AUROC}_{\text{IU}} - \text{AUROC}_{\text{NIH}}$
-    \item Calibration: ECE on both datasets
-\end{itemize}
-
-\textbf{Qualitative Analysis:}
-\begin{itemize}
-    \item Error analysis: Sample 100 false positives and false negatives from NIH-14
-    \item Identify patterns:
-    \begin{itemize}
-        \item Equipment artifacts (e.g., pacemaker wires misclassified as consolidation)
-        \item Projection differences (AP vs. PA)
-        \item Labeling errors in NIH-14 (recall: NLP-extracted labels)
-    \end{itemize}
-    \item Visualize: Attention maps on misclassified examples
-\end{itemize}
-
-\subsubsection{Expected Contributions}
-
-\begin{itemize}
-    \item Comprehensive cross-dataset benchmark:
-    \begin{itemize}
-        \item IU X-Ray: 0.85 AUROC
-        \item NIH-14: 0.78 AUROC (baseline, $\Delta = 7\%$)
-        \item With few-shot (5\%): 0.82 AUROC ($\Delta = 3\%$)
-    \end{itemize}
-    \item Identify diseases with poor generalization (rare diseases, subtle findings)
-    \item Demonstrate simple techniques (TTA, few-shot) recover 50-70\% of performance drop
-    \item Provide failure taxonomy for future work
-\end{itemize}
-
-\textbf{Publication venue:} MICCAI, MIDL (emphasize robustness and clinical deployment)
-
-\subsection{Implementation Timeline}
-
-Table \ref{tab:timeline_detailed} breaks down implementation phases:
-
-\begin{table}[h]
-\centering
-\caption{Detailed Implementation Timeline}
-\label{tab:timeline_detailed}
-\small
-\begin{tabular}{lll}
-\toprule
-\textbf{Phase} & \textbf{Duration} & \textbf{Tasks} \\
-\midrule
-\textbf{Setup} & Weeks 1-2 & Environment, datasets, reproduce baselines \\
-\textbf{Extension 1} & Weeks 3-6 & Uncertainty quantification \\
-\textbf{Extension 2} & Weeks 7-10 & Factuality-constrained generation \\
-\textbf{Extension 3} & Weeks 11-14 & Cross-dataset evaluation \\
-\textbf{Analysis} & Weeks 15-18 & Ablations, comparisons, error analysis \\
-\textbf{Writing} & Weeks 19-24 & Paper draft, revision, submission \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Risk Mitigation:}
-\begin{itemize}
-    \item If Extension 2 (factuality loss) proves too complex, focus on Extensions 1 and 3
-    \item Maintain weekly progress logs and pivot if blocked
-    \item Target workshop paper initially (4 pages), extend to conference (8 pages) if results strong
-\end{itemize}
-
-%=====================================================
-% Note: This is first half of proposal. Second half would continue with:
-% - Section 5: Experimental Plan and Evaluation
-% - Section 6: Expected Contributions and Limitations
-% - Section 7: Ethical Considerations
-% - Section 8: Timeline and Milestones
-% - Section 9: Conclusion and Future Work
-% - Bibliography
-%=====================================================
-
-% Placeholder for references (will be populated from bibliography.bib)
 \bibliographystyle{plain}
 \bibliography{references}
 
