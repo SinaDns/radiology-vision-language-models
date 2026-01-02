@@ -407,6 +407,7 @@ where $\lambda$ is a hyperparameter balancing fluency and factuality.
 \subsection{Implementation Steps}
 
 \begin{algorithm}[H]
+\label{alg:training}
 \SetAlgoLined
 \DontPrintSemicolon
 \KwInput{Images $\mathcal{X}$, Real Reports $\mathcal{Y}$}
@@ -442,11 +443,11 @@ Calculate variance of outputs to measure confidence\;
 %==============================================================================
 \section{Project Timeline}
 \begin{itemize}
-    \item \textbf{Month 1-2:} Setup environment and reproduce CheXzero baseline on IU X-Ray.
-    \item \textbf{Month 3:} Implement Uncertainty Quantification (MC Dropout).
-    \item \textbf{Month 4:} Implement RadGraph-based loss function (Algorithm \ref{alg:training}).
-    \item \textbf{Month 5:} Run cross-dataset validation on NIH ChestX-ray14.
-    \item \textbf{Month 6:} Analyze failure modes and write final paper.
+    \item \textbf{Week 1-2:} Setup environment and reproduce CheXzero baseline on IU X-Ray.
+    \item \textbf{Week 3:} Implement Uncertainty Quantification (MC Dropout).
+    \item \textbf{Week 3-4:} Implement RadGraph-based loss function (Algorithm \ref{alg:training}).
+    \item \textbf{Week 4-5:} Run cross-dataset validation on NIH ChestX-ray14.
+    \item \textbf{Week 5:} Analyze failure modes and write final paper.
 \end{itemize}
 
 
