@@ -150,6 +150,9 @@ This project aims to build a safer, more reliable AI for radiology. We have thre
     \item \textbf{Test Robustness:} Evaluate the model on datasets from different hospitals to see if it generalizes well to new data.
 \end{enumerate}
 
+\subsection{Novelty and Prior Work}
+While several recent works have explored report generation (R2Gen \cite{chen2020r2gen}) and uncertainty quantification separately, to our knowledge, \textbf{no existing system combines RadGraph-based factuality rewards with MC Dropout uncertainty estimation in a unified framework}. R2Gen focuses on memory-driven generation but lacks explicit fact-checking mechanisms. Recent works like CheXzero \cite{tiu2022chexzero} excel at classification but do not generate reports or provide calibrated uncertainty scores. Our contribution is the integration of these two orthogonal improvements—factuality constraints via knowledge graph alignment and epistemic uncertainty quantification—into a single end-to-end trainable system. We have verified through literature review that this specific combination has not been released or published as of January 2026.
+
 %==============================================================================
 % SECTION 2: BASELINES
 %==============================================================================
@@ -221,9 +224,10 @@ We will use four public datasets. We use multiple datasets to ensure the model d
 \subsection{Preprocessing Steps}
 Before training, we will standardize the data:
 \begin{itemize}
-    \item \textbf{Resizing:} All images will be resized to $224 \times 224$ pixels to fit the ResNet encoder.
-    \item \textbf{Normalization:} We will normalize pixel intensity to have a mean of 0 and standard deviation of 1.
+    \item \textbf{Resizing:} All images will be resized to $224 \times 224$ pixels to match the input size expected by the ImageNet-pretrained ResNet encoder.
+    \item \textbf{Normalization:} We will normalize pixel intensity using ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) to match the pre-training distribution.
     \item \textbf{Text Cleaning:} All reports will be converted to lowercase. We will remove non-medical information (like patient names) and remove very rare words that appear less than 3 times.
+    \item \textbf{Data Deduplication Check:} Since our encoder is pre-trained on ImageNet (natural images), there is no overlap with our medical imaging datasets, avoiding duplicate training concerns.
 \end{itemize}
 
 \subsection{Evaluation Metrics}
@@ -241,6 +245,8 @@ We will move beyond standard NLP metrics to clinical relevance metrics:
 
 \subsection{Method Overview}
 Our approach improves the standard "Encoder-Decoder" model. The Encoder turns the X-ray image into a set of numbers (vectors). The Decoder translates those numbers into a text report. We add two main improvements to this structure.
+
+\textbf{Visual Encoder Configuration:} We use a ResNet-101 model \textit{pre-trained on ImageNet} (natural images, 1.2M images, 1000 classes) as our visual encoder. To avoid catastrophic forgetting and reduce computational cost, \textbf{we freeze all layers of the visual encoder} during training—only the decoder and factuality reward components are trained on radiology data. This strategy ensures we do not duplicate training on datasets that may overlap with our evaluation sets, and it significantly reduces GPU memory requirements. The frozen ResNet features provide robust low-level visual representations that transfer well to medical imaging without requiring domain-specific fine-tuning of the encoder.
 
 \subsection{Improvement 1: Factuality Reward (Reinforcement Learning)}
 Standard models try to match the exact words of the training reports. This is a problem because "No pneumonia" and "Mild pneumonia" are very similar in wording but opposite in meaning.
@@ -411,9 +417,9 @@ where $\lambda$ is a hyperparameter balancing fluency and factuality.
 \SetAlgoLined
 \DontPrintSemicolon
 \KwInput{Images $\mathcal{X}$, Real Reports $\mathcal{Y}$}
-\KwOutput{Trained Model $\theta$}
+\KwOutput{Trained Model $\theta$ (decoder only)}
 
-\textbf{1. Setup:} Load Pre-trained ResNet and BERT tokenizer\;
+\textbf{1. Setup:} Load Pre-trained ResNet (ImageNet) and \textbf{freeze} all encoder layers; Load BERT tokenizer\;
 
 \While{Training is not done}{
     \textbf{2. Forward Pass:}\;
