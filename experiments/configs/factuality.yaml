@@ -1,0 +1,41 @@
+model:
+  r2gen_checkpoint: experiments/results/checkpoints/r2gen/best.pt
+  d_model: 512
+  num_heads: 8
+  num_enc_layers: 3
+  num_dec_layers: 3
+  dim_ff: 2048
+  dropout: 0.1
+  num_mem_slots: 3
+  max_seq_len: 100
+  pretrained_image: false   # load from r2gen checkpoint
+
+training:
+  batch_size: 16
+  lr: 1.0e-5              # lower LR for fine-tuning
+  weight_decay: 1.0e-4
+  epochs: 10
+  grad_clip: 1.0
+  mixed_precision: true
+  log_every_n_batches: 50
+  coverage_weight: 0.3    # λ for factuality loss
+
+tokenizer:
+  min_freq: 3
+  max_length: 100
+  vocab_save_path: experiments/results/r2gen_vocab.json
+
+data:
+  image_size: 224
+  num_workers: 4
+  val_split: 0.1
+
+paths:
+  iu_xray_dir: data/iu_xray/
+  checkpoint_dir: experiments/results/checkpoints/factuality/
+  log_dir: experiments/results/logs/
+
+logging:
+  use_wandb: false
+  project: radiology-vlm
+  run_name: factuality-finetune

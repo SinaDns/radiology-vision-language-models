@@ -1,0 +1,24 @@
+model:
+  chexzero_checkpoint: experiments/results/checkpoints/chexzero/best.pt
+  embed_dim: 512
+  dropout_rate: 0.1
+  n_mc_samples: 20
+
+conformal:
+  alpha: 0.1            # target error rate → 90% coverage
+
+data:
+  image_size: 320
+  num_workers: 4
+
+paths:
+  nih14_dir: data/nih_chestxray14/
+  nih14_split_csv: data/nih_chestxray14/test_list.txt
+  nih14_calib_csv: data/nih_chestxray14/train_val_list.txt   # used as calibration set
+  results_dir: experiments/results/uncertainty/
+  log_dir: experiments/results/logs/
+
+logging:
+  use_wandb: false
+  project: radiology-vlm
+  run_name: uncertainty-eval

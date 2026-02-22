@@ -1,14 +1,25 @@
+"""Zero-shot classification utilities for CheXzero.
+
+For each pathology label, positive and negative prompt templates are
+encoded once then used to score images via cosine similarity.
+"""
+
+import logging
+import time
 from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-# Positive/negative prompt templates for each NIH-14 pathology.
-# Based on the CheXzero paper's approach: soft prompts that describe
-# radiological findings rather than bare label names.
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Prompt templates (5–7 per label, positive + negative)
+# Based on CheXzero paper's approach: radiological sentence templates
+# rather than bare label names.
+# ---------------------------------------------------------------------------
 PATHOLOGY_PROMPTS: dict[str, dict[str, list[str]]] = {
     "Atelectasis": {
         "positive": [
@@ -249,6 +260,10 @@ PATHOLOGY_PROMPTS: dict[str, dict[str, list[str]]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
 def _encode_prompts(
     model: torch.nn.Module,
     prompts: list[str],
@@ -256,8 +271,12 @@ def _encode_prompts(
     device: torch.device,
     batch_size: int = 64,
 ) -> torch.Tensor:
-    """Encode a list of text prompts into L2-normalised embeddings."""
-    all_embeddings = []
+    """Encode a list of text prompts into L2-normalised embeddings.
+
+    Returns:
+        ``(N, embed_dim)`` tensor on CPU.
+    """
+    all_embeddings: list[torch.Tensor] = []
 
     for start in range(0, len(prompts), batch_size):
         batch = prompts[start : start + batch_size]
@@ -268,15 +287,19 @@ def _encode_prompts(
             truncation=True,
             return_tensors="pt",
         )
-        input_ids = tokens["input_ids"].to(device)
+        input_ids      = tokens["input_ids"].to(device)
         attention_mask = tokens["attention_mask"].to(device)
 
         with torch.no_grad():
-            embeddings = model.encode_text(input_ids, attention_mask)  # (n, D)
-        all_embeddings.append(embeddings.cpu())
+            emb = model.encode_text(input_ids, attention_mask)  # (n, D)
+        all_embeddings.append(emb.cpu())
 
     return torch.cat(all_embeddings, dim=0)   # (N, D)
 
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def compute_zero_shot_scores(
@@ -288,42 +311,80 @@ def compute_zero_shot_scores(
 ) -> dict[str, np.ndarray]:
     """Compute zero-shot classification scores for each pathology label.
 
-    For each image the score for a label is:
-        mean(cosine_sim(image, positive_prompts))
-        - mean(cosine_sim(image, negative_prompts))
+    For each image the score for label *L* is:
+
+    .. code-block:: text
+
+        score = mean(sim(image, positive_prompts_L))
+                - mean(sim(image, negative_prompts_L))
+
+    Args:
+        model:        CheXzero model (must implement ``encode_image`` and
+                      ``encode_text``).
+        image_loader: DataLoader yielding ``{image: Tensor}`` batches.
+        labels:       List of pathology label names (must be keys in
+                      :data:`PATHOLOGY_PROMPTS`).
+        device:       Compute device.
+        tokenizer:    Pre-loaded BioClinicalBERT tokenizer; loaded
+                      automatically if not provided.
 
     Returns:
-        Dict mapping label name → 1-D array of scores (one per image).
+        Dict ``{label: score_array}`` where each array has shape ``(N,)``
+        with ``N`` = total number of images.
     """
     if tokenizer is None:
-        from transformers import AutoTokenizer as _AT
-        tokenizer = _AT.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+        logger.info("Loading BioClinicalBERT tokenizer for zero-shot scoring …")
+        tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 
     model.eval()
 
-    # Pre-compute text embeddings for every prompt (done once).
+    # ── Pre-compute text embeddings once ────────────────────────────────────
+    logger.info("Pre-computing text embeddings for %d labels …", len(labels))
     pos_embeddings: dict[str, torch.Tensor] = {}
     neg_embeddings: dict[str, torch.Tensor] = {}
 
     for label in labels:
-        prompts = PATHOLOGY_PROMPTS.get(label, {})
-        pos_prompts = prompts.get("positive", [f"findings consistent with {label.lower()}"])
-        neg_prompts = prompts.get("negative", [f"no {label.lower()}"])
+        prompts   = PATHOLOGY_PROMPTS.get(label, {})
+        pos_list  = prompts.get("positive", [f"findings consistent with {label.lower()}"])
+        neg_list  = prompts.get("negative", [f"no {label.lower()}"])
+        pos_embeddings[label] = _encode_prompts(model, pos_list, tokenizer, device)
+        neg_embeddings[label] = _encode_prompts(model, neg_list, tokenizer, device)
+        logger.debug(
+            "  %s — pos_prompts=%d neg_prompts=%d",
+            label, len(pos_list), len(neg_list),
+        )
 
-        pos_embeddings[label] = _encode_prompts(model, pos_prompts, tokenizer, device)
-        neg_embeddings[label] = _encode_prompts(model, neg_prompts, tokenizer, device)
+    # ── Score images ─────────────────────────────────────────────────────────
+    scores: dict[str, list[np.ndarray]] = {label: [] for label in labels}
+    n_batches = len(image_loader)
+    start = time.time()
 
-    scores: dict[str, list] = {label: [] for label in labels}
+    logger.info("Scoring %d batches …", n_batches)
 
-    for batch in image_loader:
-        images = batch["image"].to(device)
+    for batch_idx, batch in enumerate(image_loader):
+        images = batch["image"].to(device, non_blocking=True)
+
         with torch.no_grad():
             img_feats = model.encode_image(images).cpu()   # (B, D)
 
         for label in labels:
-            pos_sim = img_feats @ pos_embeddings[label].T   # (B, n_pos)
-            neg_sim = img_feats @ neg_embeddings[label].T   # (B, n_neg)
-            score = pos_sim.mean(dim=1) - neg_sim.mean(dim=1)   # (B,)
+            pos_sim = img_feats @ pos_embeddings[label].T  # (B, n_pos)
+            neg_sim = img_feats @ neg_embeddings[label].T  # (B, n_neg)
+            score   = pos_sim.mean(dim=1) - neg_sim.mean(dim=1)
             scores[label].append(score.numpy())
 
-    return {label: np.concatenate(scores[label]) for label in labels}
+        if batch_idx % 50 == 0:
+            elapsed = time.time() - start
+            logger.info(
+                "  Scored batch %d/%d — elapsed=%.1fs",
+                batch_idx, n_batches, elapsed,
+            )
+
+    elapsed = time.time() - start
+    concatenated = {label: np.concatenate(scores[label]) for label in labels}
+    n_images = next(iter(concatenated.values())).shape[0]
+    logger.info(
+        "Zero-shot scoring complete — images=%d labels=%d time=%.1fs",
+        n_images, len(labels), elapsed,
+    )
+    return concatenated
