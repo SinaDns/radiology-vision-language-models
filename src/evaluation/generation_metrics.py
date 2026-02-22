@@ -4,25 +4,46 @@ All functions accept lists of hypothesis and reference strings.
 """
 
 import logging
-from typing import Union
+
+import nltk
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# NLTK downloads (safe to call multiple times)
+# NLTK resource downloader — handles both pre-3.9 (punkt) and 3.9+ (punkt_tab)
 # ---------------------------------------------------------------------------
 
 def _ensure_nltk():
-    import nltk
-    for resource in ("punkt", "wordnet", "omw-1.4"):
+    """Download required NLTK resources if not already present.
+
+    NLTK 3.9+ renamed ``punkt`` → ``punkt_tab``.  We try both so the
+    code works with any version installed in a Colab runtime.
+    """
+    # punkt / punkt_tab (sentence tokenizer)
+    for resource, category in [
+        ("punkt_tab", "tokenizers"),
+        ("punkt",     "tokenizers"),
+    ]:
         try:
-            nltk.data.find(f"tokenizers/{resource}")
+            nltk.data.find(f"{category}/{resource}")
+            break   # found one, stop trying
         except LookupError:
             try:
-                nltk.data.find(f"corpora/{resource}")
-            except LookupError:
-                logger.info("Downloading NLTK resource: %s", resource)
                 nltk.download(resource, quiet=True)
+                break
+            except Exception:
+                continue   # try next variant
+
+    # wordnet + omw (for METEOR)
+    for resource, category in [
+        ("wordnet",  "corpora"),
+        ("omw-1.4",  "corpora"),
+    ]:
+        try:
+            nltk.data.find(f"{category}/{resource}")
+        except LookupError:
+            nltk.download(resource, quiet=True)
 
 
 # ---------------------------------------------------------------------------
@@ -50,13 +71,16 @@ def compute_bleu(
     sf = SmoothingFunction().method1
 
     tokenised_hyps = [h.lower().split() for h in hypotheses]
-    tokenised_refs = [[r.lower().split()] for r in references]   # each ref is a list of refs
+    tokenised_refs = [[r.lower().split()] for r in references]
 
-    results = {}
+    results: dict[str, float] = {}
     for n in range(1, max_n + 1):
         weights = tuple(1.0 / n for _ in range(n))
         try:
-            score = corpus_bleu(tokenised_refs, tokenised_hyps, weights=weights, smoothing_function=sf)
+            score = corpus_bleu(
+                tokenised_refs, tokenised_hyps,
+                weights=weights, smoothing_function=sf,
+            )
         except Exception as exc:
             logger.warning("BLEU-%d computation failed: %s", n, exc)
             score = 0.0
@@ -84,21 +108,23 @@ def compute_rouge(
         Dict with keys ``rouge_1``, ``rouge_2``, ``rouge_l``.
     """
     try:
-        from rouge_score import rouge_scorer
+        from rouge_score import rouge_scorer as rs_lib
     except ImportError as exc:
-        raise ImportError("rouge-score is not installed. Run: pip install rouge-score") from exc
+        raise ImportError(
+            "rouge-score is not installed. Run: pip install rouge-score"
+        ) from exc
 
-    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
+    scorer = rs_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 
     r1_total = r2_total = rl_total = 0.0
     n = len(hypotheses)
 
     for hyp, ref in zip(hypotheses, references):
         try:
-            scores = scorer.score(ref, hyp)
-            r1_total += scores["rouge1"].fmeasure
-            r2_total += scores["rouge2"].fmeasure
-            rl_total += scores["rougeL"].fmeasure
+            scores     = scorer.score(ref, hyp)
+            r1_total  += scores["rouge1"].fmeasure
+            r2_total  += scores["rouge2"].fmeasure
+            rl_total  += scores["rougeL"].fmeasure
         except Exception as exc:
             logger.warning("ROUGE scoring failed for one sample: %s", exc)
             n -= 1
@@ -136,11 +162,11 @@ def compute_meteor(
     from nltk.translate.meteor_score import meteor_score
 
     total = 0.0
-    n = len(hypotheses)
+    n     = len(hypotheses)
 
     for hyp, ref in zip(hypotheses, references):
         try:
-            score = meteor_score([ref.lower().split()], hyp.lower().split())
+            score  = meteor_score([ref.lower().split()], hyp.lower().split())
             total += score
         except Exception as exc:
             logger.warning("METEOR scoring failed for one sample: %s", exc)
@@ -159,7 +185,7 @@ def compute_all_metrics(
     hypotheses: list[str],
     references: list[str],
 ) -> dict[str, float]:
-    """Compute BLEU-1/2/3/4, ROUGE-1/2/L, and METEOR.
+    """Compute BLEU-1/2/3/4, ROUGE-1/2/L, and METEOR in one call.
 
     Args:
         hypotheses: N generated reports.
@@ -168,9 +194,7 @@ def compute_all_metrics(
     Returns:
         Flat dict with all metric scores.
     """
-    logger.info(
-        "Computing generation metrics on %d samples …", len(hypotheses)
-    )
+    logger.info("Computing generation metrics on %d samples …", len(hypotheses))
     metrics: dict[str, float] = {}
     metrics.update(compute_bleu(hypotheses, references))
     metrics.update(compute_rouge(hypotheses, references))
@@ -185,7 +209,8 @@ def compute_all_metrics(
 
 def generation_report(metrics: dict[str, float]) -> str:
     """Return a formatted string table of generation metrics."""
-    order = ["bleu_1", "bleu_2", "bleu_3", "bleu_4", "meteor", "rouge_1", "rouge_2", "rouge_l"]
+    order = ["bleu_1", "bleu_2", "bleu_3", "bleu_4",
+             "meteor", "rouge_1", "rouge_2", "rouge_l"]
     lines = [f"{'Metric':<15} {'Score':>8}", "-" * 24]
     for key in order:
         if key in metrics:

@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+import torch.amp
 from torch.utils.data import DataLoader
 
 from src.data_loaders.iu_xray_seq2seq import IUXraySeq2SeqDataset, build_tokenizer
@@ -58,6 +58,7 @@ def main():
 
     device = torch.device(args.device)
     logger.info("Device: %s", device)
+    _use_amp = config["training"].get("mixed_precision", True) and device.type == "cuda"
 
     # ── Tokenizer & datasets ─────────────────────────────────────────────────
     tok_cfg  = config["tokenizer"]
@@ -132,7 +133,7 @@ def main():
         lr=config["training"]["lr"],
         weight_decay=config["training"].get("weight_decay", 1e-4),
     )
-    scaler = GradScaler(enabled=config["training"].get("mixed_precision", True))
+    scaler = torch.amp.GradScaler(device=device.type, enabled=_use_amp)
 
     ckpt_dir = config["paths"]["checkpoint_dir"]
     Path(ckpt_dir).mkdir(parents=True, exist_ok=True)
@@ -158,7 +159,7 @@ def main():
             optimizer.zero_grad()
 
             try:
-                with autocast(enabled=config["training"].get("mixed_precision", True)):
+                with torch.amp.autocast(device_type=device.type, enabled=_use_amp):
                     logits = model(images, input_ids)
                     loss, ce_loss, fact_loss = criterion(logits, target_ids)
             except Exception as exc:
@@ -206,7 +207,7 @@ def main():
                 images     = batch["image"].to(device, non_blocking=True)
                 input_ids  = batch["input_ids"].to(device, non_blocking=True)
                 target_ids = batch["target_ids"].to(device, non_blocking=True)
-                with autocast(enabled=True):
+                with torch.amp.autocast(device_type=device.type, enabled=_use_amp):
                     logits = model(images, input_ids)
                     loss, _, _ = criterion(logits, target_ids)
                 val_loss += loss.item()
