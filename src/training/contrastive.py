@@ -1,4 +1,8 @@
-"""Contrastive trainer for CheXzero (CLIP objective on IU X-Ray)."""
+"""Contrastive trainer for CheXzero (CLIP objective on IU X-Ray).
+
+Uses torch.amp.autocast (PyTorch ≥ 2.0) to avoid the deprecation
+of torch.cuda.amp.autocast introduced in PyTorch 2.4.
+"""
 
 import logging
 import os
@@ -7,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+import torch.amp
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
@@ -17,19 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 def _gpu_memory_str(device: torch.device) -> str:
-    """Return a short string with current GPU memory usage."""
     if device.type != "cuda":
         return "N/A (CPU)"
-    allocated = torch.cuda.memory_allocated(device) / 1e9
-    reserved  = torch.cuda.memory_reserved(device) / 1e9
-    return f"{allocated:.2f}/{reserved:.2f} GB (alloc/reserved)"
+    alloc    = torch.cuda.memory_allocated(device) / 1e9
+    reserved = torch.cuda.memory_reserved(device) / 1e9
+    return f"{alloc:.2f}/{reserved:.2f} GB (alloc/reserved)"
 
 
 class ContrastiveTrainer:
     """Trains a CheXzero model with the CLIP contrastive objective.
 
     Features:
-    - Mixed-precision training (``torch.cuda.amp``)
+    - Mixed-precision training (``torch.amp``, PyTorch 2.x compatible)
     - Gradient clipping
     - Best-checkpoint saving (by validation loss)
     - Optional WandB logging
@@ -41,7 +44,7 @@ class ContrastiveTrainer:
         train_loader: DataLoader yielding ``{image, report, study_id}``.
         val_loader:   DataLoader yielding ``{image, report, study_id}``.
         device:       torch.device to train on.
-        logger:       Optional external logger; defaults to module logger.
+        logger:       Optional external logger; falls back to module logger.
     """
 
     BERT_MODEL = "emilyalsentzer/Bio_ClinicalBERT"
@@ -55,26 +58,31 @@ class ContrastiveTrainer:
         device: torch.device,
         logger: Optional[logging.Logger] = None,
     ):
-        self.model = model.to(device)
-        self.config = config
+        self.model        = model.to(device)
+        self.config       = config
         self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.device = device
-        self._log = logger or logging.getLogger(__name__)
+        self.val_loader   = val_loader
+        self.device       = device
+        self._log         = logger or logging.getLogger(__name__)
 
         train_cfg = config["training"]
-        self.epochs         = train_cfg["epochs"]
-        self.grad_clip      = train_cfg.get("grad_clip", 1.0)
+        self.epochs          = train_cfg["epochs"]
+        self.grad_clip       = train_cfg.get("grad_clip", 1.0)
         self.mixed_precision = train_cfg.get("mixed_precision", True)
-        self.use_wandb      = config.get("logging", {}).get("use_wandb", False)
-        self.log_every      = train_cfg.get("log_every_n_batches", 50)
+        self.use_wandb       = config.get("logging", {}).get("use_wandb", False)
+        self.log_every       = train_cfg.get("log_every_n_batches", 50)
+        self._device_type    = device.type   # "cuda" or "cpu"
 
         self.optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=train_cfg["lr"],
             weight_decay=train_cfg.get("weight_decay", 1e-4),
         )
-        self.scaler = GradScaler(enabled=self.mixed_precision)
+        # GradScaler is a no-op when enabled=False (CPU or disabled AMP)
+        self.scaler = torch.amp.GradScaler(
+            device=self._device_type,
+            enabled=(self.mixed_precision and device.type == "cuda"),
+        )
 
         self._log.info(
             "ContrastiveTrainer — device=%s epochs=%d lr=%s bs=%d "
@@ -84,7 +92,7 @@ class ContrastiveTrainer:
         )
 
         self._log.info("Loading tokenizer %s …", self.BERT_MODEL)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.BERT_MODEL)
+        self.tokenizer      = AutoTokenizer.from_pretrained(self.BERT_MODEL)
         self.max_text_length = 256
 
         checkpoint_dir = config["paths"]["checkpoint_dir"]
@@ -111,7 +119,7 @@ class ContrastiveTrainer:
 
     def train_epoch(self, epoch: int) -> float:
         self.model.train()
-        total_loss = 0.0
+        total_loss  = 0.0
         epoch_start = time.time()
 
         self._log.info(
@@ -127,12 +135,12 @@ class ContrastiveTrainer:
             reports = batch["report"]
 
             try:
-                tokens = self._tokenize(reports)
-                input_ids     = tokens["input_ids"].to(self.device, non_blocking=True)
+                tokens         = self._tokenize(reports)
+                input_ids      = tokens["input_ids"].to(self.device, non_blocking=True)
                 attention_mask = tokens["attention_mask"].to(self.device, non_blocking=True)
             except Exception as exc:
                 self._log.error(
-                    "Tokenisation failed at epoch=%d batch=%d: %s",
+                    "Tokenisation failed — epoch=%d batch=%d: %s",
                     epoch, batch_idx, exc, exc_info=True,
                 )
                 raise
@@ -140,50 +148,50 @@ class ContrastiveTrainer:
             self.optimizer.zero_grad()
 
             try:
-                with autocast(enabled=self.mixed_precision):
+                amp_ctx = torch.amp.autocast(
+                    device_type=self._device_type,
+                    enabled=(self.mixed_precision and self._device_type == "cuda"),
+                )
+                with amp_ctx:
                     logits_i, logits_t = self.model(images, input_ids, attention_mask)
                     loss = clip_loss(logits_i, logits_t)
             except Exception as exc:
                 self._log.error(
-                    "Forward pass failed at epoch=%d batch=%d "
-                    "images.shape=%s input_ids.shape=%s: %s",
-                    epoch, batch_idx, images.shape, input_ids.shape, exc,
-                    exc_info=True,
+                    "Forward pass failed — epoch=%d batch=%d "
+                    "images=%s input_ids=%s: %s",
+                    epoch, batch_idx, list(images.shape), list(input_ids.shape),
+                    exc, exc_info=True,
                 )
                 raise
 
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
-
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(), self.grad_clip
             )
-
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
             total_loss += loss.item()
-            batch_ms = (time.time() - batch_start) * 1000
+            batch_ms    = (time.time() - batch_start) * 1000
 
             if batch_idx % self.log_every == 0:
-                logit_scale = self.model.logit_scale.exp().item()
+                scale = self.model.logit_scale.exp().item()
                 self._log.info(
                     "Epoch %d [%d/%d] loss=%.4f grad_norm=%.3f "
                     "logit_scale=%.3f batch_ms=%.0f gpu_mem=%s",
                     epoch, batch_idx, len(self.train_loader),
                     loss.item(), grad_norm.item(),
-                    logit_scale, batch_ms,
-                    _gpu_memory_str(self.device),
+                    scale, batch_ms, _gpu_memory_str(self.device),
                 )
-
                 if self.use_wandb:
                     self._wandb_log({
-                        "train/batch_loss": loss.item(),
-                        "train/grad_norm": grad_norm.item(),
-                        "train/logit_scale": logit_scale,
+                        "train/batch_loss":   loss.item(),
+                        "train/grad_norm":    grad_norm.item(),
+                        "train/logit_scale":  scale,
                     })
 
-        avg_loss = total_loss / len(self.train_loader)
+        avg_loss  = total_loss / len(self.train_loader)
         epoch_sec = time.time() - epoch_start
         self._log.info(
             "=== Epoch %d DONE — avg_train_loss=%.4f epoch_time=%.1fs ===",
@@ -197,7 +205,7 @@ class ContrastiveTrainer:
     def validate(self) -> float:
         self.model.eval()
         total_loss = 0.0
-        start = time.time()
+        start      = time.time()
 
         self._log.info("Validation — %d batches", len(self.val_loader))
 
@@ -206,17 +214,21 @@ class ContrastiveTrainer:
             reports = batch["report"]
 
             try:
-                tokens = self._tokenize(reports)
+                tokens         = self._tokenize(reports)
                 input_ids      = tokens["input_ids"].to(self.device, non_blocking=True)
                 attention_mask = tokens["attention_mask"].to(self.device, non_blocking=True)
             except Exception as exc:
                 self._log.error(
-                    "Val tokenisation failed at batch=%d: %s",
+                    "Val tokenisation failed — batch=%d: %s",
                     batch_idx, exc, exc_info=True,
                 )
                 raise
 
-            with autocast(enabled=self.mixed_precision):
+            amp_ctx = torch.amp.autocast(
+                device_type=self._device_type,
+                enabled=(self.mixed_precision and self._device_type == "cuda"),
+            )
+            with amp_ctx:
                 logits_i, logits_t = self.model(images, input_ids, attention_mask)
                 loss = clip_loss(logits_i, logits_t)
 
@@ -234,34 +246,35 @@ class ContrastiveTrainer:
     def save_checkpoint(self, epoch: int, val_loss: float, tag: str = "best"):
         path = os.path.join(self.checkpoint_dir, f"{tag}.pt")
         torch.save({
-            "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
+            "epoch":                epoch,
+            "model_state_dict":     self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
-            "scaler_state_dict": self.scaler.state_dict(),
-            "val_loss": val_loss,
-            "config": self.config,
+            "scaler_state_dict":    self.scaler.state_dict(),
+            "val_loss":             val_loss,
+            "config":               self.config,
         }, path)
-        self._log.info("Checkpoint saved → %s  (epoch=%d val_loss=%.4f)", path, epoch, val_loss)
+        self._log.info(
+            "Checkpoint saved → %s  (epoch=%d val_loss=%.4f)",
+            path, epoch, val_loss,
+        )
 
     def load_checkpoint(self, path: str) -> int:
         self._log.info("Loading checkpoint from %s …", path)
-        checkpoint = torch.load(path, map_location=self.device)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        if "scaler_state_dict" in checkpoint:
-            self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        epoch = checkpoint["epoch"]
-        val_loss = checkpoint.get("val_loss", float("nan"))
-        self._log.info(
-            "Resumed from epoch=%d val_loss=%.4f", epoch, val_loss
-        )
+        ckpt = torch.load(path, map_location=self.device)
+        self.model.load_state_dict(ckpt["model_state_dict"])
+        self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        if "scaler_state_dict" in ckpt:
+            self.scaler.load_state_dict(ckpt["scaler_state_dict"])
+        epoch    = ckpt["epoch"]
+        val_loss = ckpt.get("val_loss", float("nan"))
+        self._log.info("Resumed from epoch=%d val_loss=%.4f", epoch, val_loss)
         return epoch
 
     # ── Main training loop ────────────────────────────────────────────────────
 
     def train(self, resume_path: Optional[str] = None):
         start_epoch = 0
-        if resume_path is not None:
+        if resume_path:
             start_epoch = self.load_checkpoint(resume_path) + 1
 
         best_val_loss = float("inf")
@@ -282,8 +295,8 @@ class ContrastiveTrainer:
             if self.use_wandb:
                 self._wandb_log({
                     "train/epoch_loss": train_loss,
-                    "val/loss": val_loss,
-                    "epoch": epoch,
+                    "val/loss":         val_loss,
+                    "epoch":            epoch,
                 })
 
             if val_loss < best_val_loss:
@@ -298,13 +311,9 @@ class ContrastiveTrainer:
             best_val_loss, self.checkpoint_dir,
         )
 
-    # ── WandB helper ──────────────────────────────────────────────────────────
-
     def _wandb_log(self, data: dict):
         try:
             import wandb
             wandb.log(data)
-        except ImportError:
-            self._log.warning("wandb not installed; skipping wandb.log()")
         except Exception as exc:
             self._log.warning("wandb.log() failed: %s", exc)

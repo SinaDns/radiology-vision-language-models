@@ -1,4 +1,8 @@
-"""Sequence-to-sequence trainer for R2Gen report generation."""
+"""Sequence-to-sequence trainer for R2Gen report generation.
+
+Uses torch.amp.autocast (PyTorch ≥ 2.0) to avoid the deprecation of
+torch.cuda.amp.autocast introduced in PyTorch 2.4.
+"""
 
 import logging
 import os
@@ -7,8 +11,8 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+import torch.amp
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -17,7 +21,7 @@ logger = logging.getLogger(__name__)
 def _gpu_memory_str(device: torch.device) -> str:
     if device.type != "cuda":
         return "N/A"
-    alloc   = torch.cuda.memory_allocated(device) / 1e9
+    alloc    = torch.cuda.memory_allocated(device) / 1e9
     reserved = torch.cuda.memory_reserved(device) / 1e9
     return f"{alloc:.2f}/{reserved:.2f} GB (alloc/reserved)"
 
@@ -25,10 +29,10 @@ def _gpu_memory_str(device: torch.device) -> str:
 class R2GenTrainer:
     """Trains an R2Gen model with teacher-forced cross-entropy loss.
 
-    The data loader is expected to yield batches with keys:
-      ``image``      (B, 3, H, W)
-      ``input_ids``  (B, T)   — BOS + tokens (decoder input)
-      ``target_ids`` (B, T)   — tokens + EOS (loss targets)
+    Expected batch keys from the DataLoader:
+    - ``image``      ``(B, 3, H, W)``
+    - ``input_ids``  ``(B, T)``  — BOS + tokens (decoder input)
+    - ``target_ids`` ``(B, T)``  — tokens + EOS (loss targets)
 
     Args:
         model:        R2GenModel instance.
@@ -36,7 +40,7 @@ class R2GenTrainer:
         train_loader: DataLoader for training split.
         val_loader:   DataLoader for validation split.
         device:       Compute device.
-        pad_id:       Padding token ID (used to ignore padded positions in loss).
+        pad_id:       Padding token ID (ignored in CE loss).
         logger:       Optional external logger.
     """
 
@@ -57,6 +61,7 @@ class R2GenTrainer:
         self.device       = device
         self.pad_id       = pad_id
         self._log         = logger or logging.getLogger(__name__)
+        self._device_type = device.type
 
         train_cfg = config["training"]
         self.epochs          = train_cfg["epochs"]
@@ -73,10 +78,12 @@ class R2GenTrainer:
             weight_decay=train_cfg.get("weight_decay", 1e-4),
         )
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer,
-            T_max=train_cfg["epochs"],
+            self.optimizer, T_max=train_cfg["epochs"],
         )
-        self.scaler = GradScaler(enabled=self.mixed_precision)
+        self.scaler = torch.amp.GradScaler(
+            device=self._device_type,
+            enabled=(self.mixed_precision and device.type == "cuda"),
+        )
 
         checkpoint_dir = config["paths"]["checkpoint_dir"]
         Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
@@ -86,6 +93,15 @@ class R2GenTrainer:
             "R2GenTrainer — device=%s epochs=%d lr=%s bs=%d mixed_precision=%s",
             device, self.epochs, train_cfg["lr"],
             train_cfg["batch_size"], self.mixed_precision,
+        )
+
+    # ── AMP context helper ────────────────────────────────────────────────────
+
+    def _amp_ctx(self):
+        """Return a torch.amp.autocast context compatible with PyTorch 2.x."""
+        return torch.amp.autocast(
+            device_type=self._device_type,
+            enabled=(self.mixed_precision and self._device_type == "cuda"),
         )
 
     # ── Training epoch ────────────────────────────────────────────────────────
@@ -112,7 +128,7 @@ class R2GenTrainer:
             self.optimizer.zero_grad()
 
             try:
-                with autocast(enabled=self.mixed_precision):
+                with self._amp_ctx():
                     logits = self.model(images, input_ids)       # (B, T, V)
                     B, T, V = logits.shape
                     loss = self.criterion(
@@ -136,12 +152,10 @@ class R2GenTrainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-            # Track token-level perplexity
-            non_pad = (target_ids != self.pad_id).sum().item()
+            non_pad     = (target_ids != self.pad_id).sum().item()
             total_loss += loss.item() * non_pad
             n_tokens   += non_pad
-
-            batch_ms = (time.time() - batch_start) * 1000
+            batch_ms    = (time.time() - batch_start) * 1000
 
             if batch_idx % self.log_every == 0:
                 self._log.info(
@@ -155,8 +169,8 @@ class R2GenTrainer:
                 if self.use_wandb:
                     self._wandb_log({
                         "r2gen/train_batch_loss": loss.item(),
-                        "r2gen/train_ppl": 2 ** loss.item(),
-                        "r2gen/grad_norm": grad_norm.item(),
+                        "r2gen/train_ppl":         2 ** loss.item(),
+                        "r2gen/grad_norm":         grad_norm.item(),
                     })
 
         self.scheduler.step()
@@ -187,7 +201,7 @@ class R2GenTrainer:
             target_ids = batch["target_ids"].to(self.device, non_blocking=True)
 
             try:
-                with autocast(enabled=self.mixed_precision):
+                with self._amp_ctx():
                     logits = self.model(images, input_ids)
                     B, T, V = logits.shape
                     loss = self.criterion(
@@ -217,15 +231,18 @@ class R2GenTrainer:
     def save_checkpoint(self, epoch: int, val_loss: float, tag: str = "best"):
         path = os.path.join(self.checkpoint_dir, f"{tag}.pt")
         torch.save({
-            "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "scheduler_state_dict": self.scheduler.state_dict(),
-            "scaler_state_dict": self.scaler.state_dict(),
-            "val_loss": val_loss,
-            "config": self.config,
+            "epoch":                  epoch,
+            "model_state_dict":       self.model.state_dict(),
+            "optimizer_state_dict":   self.optimizer.state_dict(),
+            "scheduler_state_dict":   self.scheduler.state_dict(),
+            "scaler_state_dict":      self.scaler.state_dict(),
+            "val_loss":               val_loss,
+            "config":                 self.config,
         }, path)
-        self._log.info("R2Gen checkpoint → %s (epoch=%d val_loss=%.4f)", path, epoch, val_loss)
+        self._log.info(
+            "R2Gen checkpoint → %s (epoch=%d val_loss=%.4f)",
+            path, epoch, val_loss,
+        )
 
     def load_checkpoint(self, path: str) -> int:
         self._log.info("Loading R2Gen checkpoint from %s …", path)
@@ -236,7 +253,10 @@ class R2GenTrainer:
             self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         if "scaler_state_dict" in ckpt:
             self.scaler.load_state_dict(ckpt["scaler_state_dict"])
-        self._log.info("Resumed from epoch=%d val_loss=%.4f", ckpt["epoch"], ckpt.get("val_loss", float("nan")))
+        self._log.info(
+            "Resumed from epoch=%d val_loss=%.4f",
+            ckpt["epoch"], ckpt.get("val_loss", float("nan")),
+        )
         return ckpt["epoch"]
 
     # ── Main training loop ────────────────────────────────────────────────────
@@ -266,9 +286,9 @@ class R2GenTrainer:
             if self.use_wandb:
                 self._wandb_log({
                     "r2gen/epoch_train_loss": train_loss,
-                    "r2gen/epoch_val_loss": val_loss,
-                    "r2gen/val_ppl": 2 ** val_loss,
-                    "epoch": epoch,
+                    "r2gen/epoch_val_loss":   val_loss,
+                    "r2gen/val_ppl":          2 ** val_loss,
+                    "epoch":                  epoch,
                 })
 
             if val_loss < best_val_loss:

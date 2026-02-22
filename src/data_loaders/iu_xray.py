@@ -1,12 +1,17 @@
 """IU X-Ray dataset loader.
 
-Parses OpenI XML reports (FINDINGS + IMPRESSION) and resolves paired
-PNG images.  Returns (image, report_text) samples for contrastive
-training (CheXzero) or seq2seq training (R2Gen).
+Parses OpenI XML reports (FINDINGS + IMPRESSION sections) and resolves
+the paired PNG images using the exact filenames stored in each XML's
+``<parentImage URI="...">`` elements.  This avoids the substring-glob
+pitfall (e.g. study "1" matching CXR*1*.png incorrectly).
+
+Dataset structure after extraction (see download_iu_xray.sh):
+    data/iu_xray/
+        images/   ← CXR<id>_IM-<view>-<slice>.png  (flat or nested)
+        reports/  ← <uid>.xml
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional, Callable
 from xml.etree import ElementTree as ET
@@ -21,20 +26,22 @@ logger = logging.getLogger(__name__)
 class IUXrayDataset(Dataset):
     """IU X-Ray dataset returning (image, report_text) pairs.
 
-    Each study may have up to two views (frontal + lateral); both images
-    are paired with the same report text.  The dataset is split 90/10
-    by study_id so no study leaks across train and val.
+    Image-report pairing uses the exact filenames declared in each XML's
+    ``parentImage URI`` attribute, so studies with 2 views (frontal +
+    lateral) both correctly link to the same report text.
+
+    The dataset is split 90/10 by ``study_id`` — no study leaks across
+    train and val splits.
 
     Args:
         data_dir:     Root directory containing ``images/`` and ``reports/``.
         split:        ``"train"`` or ``"val"``.
-        val_fraction: Fraction of studies withheld for validation (default 0.1).
+        val_fraction: Fraction of studies withheld for validation (0.1).
         transform:    torchvision transform applied to each PIL image.
-        return_tokens: If True, also return ``report`` as-is for external
-                       tokenisation (used by R2Gen dataloader).
 
     Raises:
-        FileNotFoundError: If ``data_dir/reports/`` does not exist.
+        FileNotFoundError: If ``data_dir/reports/`` or ``data_dir/images/``
+                           do not exist.
     """
 
     def __init__(
@@ -43,35 +50,32 @@ class IUXrayDataset(Dataset):
         split: str = "train",
         val_fraction: float = 0.1,
         transform: Optional[Callable] = None,
-        return_tokens: bool = False,
     ):
         assert split in ("train", "val"), (
             f"split must be 'train' or 'val', got '{split}'"
         )
         self.transform = transform
-        self.return_tokens = return_tokens
 
         reports_dir = Path(data_dir) / "reports"
-        images_dir = Path(data_dir) / "images"
+        images_dir  = Path(data_dir) / "images"
 
         logger.info("IUXrayDataset init — data_dir=%s split=%s", data_dir, split)
 
         if not reports_dir.exists():
             raise FileNotFoundError(
                 f"Reports directory not found: {reports_dir}\n"
-                "Run experiments/scripts/download_iu_xray.sh first."
+                "Run: bash experiments/scripts/download_iu_xray.sh"
             )
         if not images_dir.exists():
             raise FileNotFoundError(
                 f"Images directory not found: {images_dir}\n"
-                "Run experiments/scripts/download_iu_xray.sh first."
+                "Run: bash experiments/scripts/download_iu_xray.sh"
             )
 
-        logger.info("Scanning reports from %s …", reports_dir)
         samples = self._build_samples(reports_dir, images_dir)
         logger.info("Raw samples (before split): %d", len(samples))
 
-        # Deterministic study-level split
+        # Deterministic study-level split (sort to ensure reproducibility)
         study_ids = sorted({s["study_id"] for s in samples})
         n_val = max(1, int(len(study_ids) * val_fraction))
         val_ids = set(study_ids[-n_val:])
@@ -85,62 +89,112 @@ class IUXrayDataset(Dataset):
         else:
             self.samples = [s for s in samples if s["study_id"] in val_ids]
 
+        n_studies = len({s["study_id"] for s in self.samples})
         logger.info(
             "[%s split] %d image-report pairs from %d studies",
-            split, len(self.samples), len({s["study_id"] for s in self.samples}),
+            split, len(self.samples), n_studies,
         )
 
-        if len(self.samples) == 0:
+        if not self.samples:
             logger.warning(
                 "Dataset is EMPTY for split='%s'. "
-                "Check that images/ and reports/ are populated.",
+                "Verify that images/ and reports/ are populated.",
                 split,
             )
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _build_samples(self, reports_dir: Path, images_dir: Path) -> list:
-        samples = []
-        xml_files = sorted(reports_dir.glob("*.xml"))
-        n_xml = len(xml_files)
-        n_empty_report = 0
-        n_no_image = 0
+        """Build (image_path, report_text, study_id) triples.
 
-        logger.info("Found %d XML report files", n_xml)
+        Uses the exact PNG filenames from ``parentImage URI`` attributes
+        inside each XML, then looks them up in an index of all available
+        images (handles nested subdirectories transparently).
+        """
+        # Build a flat index: filename → absolute path
+        # rglob handles both flat and nested extraction layouts.
+        image_index: dict[str, Path] = {}
+        for p in images_dir.rglob("*.png"):
+            image_index[p.name] = p
+
+        xml_files = sorted(reports_dir.glob("*.xml"))
+        logger.info(
+            "Found %d XML report files, %d PNG images in index",
+            len(xml_files), len(image_index),
+        )
+
+        samples = []
+        n_empty_report = 0
+        n_no_uri       = 0
+        n_uri_missing  = 0
 
         for xml_path in xml_files:
             study_id = xml_path.stem
-            report_text = self._parse_report(xml_path)
 
+            report_text = self._parse_report(xml_path)
             if not report_text.strip():
                 n_empty_report += 1
-                logger.debug("Skipping study %s — empty report", study_id)
+                logger.debug("Skipping study %s — empty FINDINGS/IMPRESSION", study_id)
                 continue
 
-            # Match images by study_id substring in filename
-            image_paths = sorted(images_dir.glob(f"*{study_id}*"))
-            if not image_paths:
-                n_no_image += 1
-                logger.debug("Skipping study %s — no matching images", study_id)
+            # Extract exact image URIs declared in this study's XML.
+            uris = self._parse_image_uris(xml_path)
+
+            if not uris:
+                # Rare: XML has no parentImage elements (malformed).
+                n_no_uri += 1
+                logger.debug("Skipping study %s — no parentImage URIs", study_id)
                 continue
 
-            for img_path in image_paths:
-                samples.append({
-                    "study_id": study_id,
-                    "image_path": str(img_path),
-                    "report": report_text,
-                })
+            found_any = False
+            for uri in uris:
+                if uri in image_index:
+                    samples.append({
+                        "study_id":   study_id,
+                        "image_path": str(image_index[uri]),
+                        "report":     report_text,
+                    })
+                    found_any = True
+                else:
+                    n_uri_missing += 1
+                    logger.debug(
+                        "Study %s — URI '%s' not found in image index", study_id, uri
+                    )
+
+            if not found_any:
+                logger.debug("Study %s — none of its URIs resolved to a file", study_id)
 
         logger.info(
-            "Build complete — kept=%d  skipped(empty report)=%d  skipped(no image)=%d",
-            len(samples), n_empty_report, n_no_image,
+            "Build complete — pairs=%d  skipped(empty_report)=%d  "
+            "skipped(no_uri)=%d  unresolved_uris=%d",
+            len(samples), n_empty_report, n_no_uri, n_uri_missing,
         )
         return samples
 
-    def _parse_report(self, xml_path: Path) -> str:
+    def _parse_image_uris(self, xml_path: Path) -> list[str]:
+        """Return the list of image filenames declared in a study XML.
+
+        Reads ``<parentImage URI="...">`` elements.  Returns an empty
+        list on parse error.
+        """
         try:
-            tree = ET.parse(xml_path)
-            root = tree.getroot()
+            root = ET.parse(xml_path).getroot()
+        except ET.ParseError as exc:
+            logger.warning("XML parse error in %s: %s", xml_path.name, exc)
+            return []
+
+        uris = []
+        for img in root.iter("parentImage"):
+            uri = img.get("URI", "").strip()
+            if uri:
+                uris.append(uri)
+
+        return uris
+
+    def _parse_report(self, xml_path: Path) -> str:
+        """Concatenate FINDINGS and IMPRESSION sections from a study XML."""
+        try:
+            root = ET.parse(xml_path).getroot()
         except ET.ParseError as exc:
             logger.warning("XML parse error in %s: %s", xml_path.name, exc)
             return ""
@@ -148,7 +202,7 @@ class IUXrayDataset(Dataset):
         sections = []
         for section in root.iter("AbstractText"):
             label = section.get("Label", "")
-            text = (section.text or "").strip()
+            text  = (section.text or "").strip()
             if label.upper() in ("FINDINGS", "IMPRESSION") and text:
                 sections.append(text)
 
@@ -166,7 +220,7 @@ class IUXrayDataset(Dataset):
             image = Image.open(sample["image_path"]).convert("L")
         except Exception as exc:
             logger.error(
-                "Failed to open image %s (idx=%d, study=%s): %s",
+                "Failed to open image %s (idx=%d study=%s): %s",
                 sample["image_path"], idx, sample["study_id"], exc,
             )
             raise
@@ -175,8 +229,8 @@ class IUXrayDataset(Dataset):
             image = self.transform(image)
 
         return {
-            "image": image,
-            "report": sample["report"],
-            "study_id": sample["study_id"],
+            "image":      image,
+            "report":     sample["report"],
+            "study_id":   sample["study_id"],
             "image_path": sample["image_path"],
         }
