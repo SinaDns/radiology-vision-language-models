@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluate R2Gen on IU X-Ray val split: BLEU, ROUGE-L, METEOR.
+"""Evaluate R2Gen on IU X-Ray val split: BLEU, ROUGE-L, METEOR, CIDEr, CheXbert F1.
 
 Usage:
     python experiments/scripts/evaluate_r2gen.py \
         --config experiments/configs/r2gen.yaml \
         --checkpoint experiments/results/checkpoints/r2gen/best.pt \
         [--device cuda] \
-        [--beam-size 3]
+        [--beam-size 3] \
+        [--skip-chexbert]
 """
 
 import argparse
@@ -20,7 +21,12 @@ from torch.utils.data import DataLoader
 
 from src.data_loaders.iu_xray_seq2seq import IUXraySeq2SeqDataset, build_tokenizer
 from src.data_loaders.transforms import get_val_transforms
-from src.evaluation.generation_metrics import compute_all_metrics, generation_report
+from src.evaluation.generation_metrics import (
+    compute_all_metrics,
+    compute_chexbert_metrics,
+    chexbert_report,
+    generation_report,
+)
 from src.models.r2gen import R2GenModel
 from src.utils.config import load_config
 from src.utils.logging_utils import setup_logger
@@ -28,10 +34,12 @@ from src.utils.logging_utils import setup_logger
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate R2Gen report generation")
-    parser.add_argument("--config",     required=True)
-    parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--device",     default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--beam-size",  type=int, default=3)
+    parser.add_argument("--config",         required=True)
+    parser.add_argument("--checkpoint",     required=True)
+    parser.add_argument("--device",         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--beam-size",      type=int, default=3)
+    parser.add_argument("--skip-chexbert",  action="store_true",
+                        help="Skip CheXbert evaluation (saves ~440 MB download + inference time)")
     return parser.parse_args()
 
 
@@ -138,12 +146,25 @@ def main():
     logger.info("Sample generated report: %s", hypotheses[0] if hypotheses else "(empty)")
     logger.info("Sample reference report: %s", references[0] if references else "(empty)")
 
-    # ── Metrics ───────────────────────────────────────────────────────────────
+    # ── N-gram metrics (BLEU / ROUGE / METEOR / CIDEr) ────────────────────────
     metrics = compute_all_metrics(hypotheses, references)
 
     print("\n=== R2Gen Generation Results (IU X-Ray val split) ===")
     print(generation_report(metrics))
-    print("\nTarget: BLEU-4 > 0.10, ROUGE-L > 0.30")
+    print("\nTarget baselines: BLEU-4 > 0.10, ROUGE-L > 0.30, CIDEr > 0.20")
+
+    # ── CheXbert label-level F1 ───────────────────────────────────────────────
+    if not args.skip_chexbert:
+        logger.info("Running CheXbert evaluation (downloads ~440 MB on first run) …")
+        cb_metrics = compute_chexbert_metrics(
+            hypotheses, references, device=str(device), batch_size=32
+        )
+        print("\n=== CheXbert Label-Level Results ===")
+        print(chexbert_report(cb_metrics))
+        print("\nTarget: CheXbert macro F1 > 0.30")
+        metrics.update(cb_metrics)
+    else:
+        logger.info("CheXbert evaluation skipped (--skip-chexbert flag).")
 
     logger.info("Evaluation complete — metrics=%s", metrics)
 

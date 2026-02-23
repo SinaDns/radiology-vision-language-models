@@ -48,7 +48,7 @@ src/
     losses.py            # clip_loss (symmetric cross-entropy)
   evaluation/
     zero_shot.py         # PATHOLOGY_PROMPTS + compute_zero_shot_scores (14 NIH labels)
-    generation_metrics.py# compute_bleu/rouge/meteor + compute_all_metrics
+    generation_metrics.py# BLEU/ROUGE/METEOR/CIDEr + CheXbert F1 + compute_all_metrics
     metrics.py           # compute_auroc, compute_auprc, compute_ece, classification_report
     calibration.py       # compute_ece, calibration_analysis, plot_calibration
     cross_dataset.py     # extract_embeddings, compute_domain_gap, FewShotLinearProbe
@@ -132,7 +132,7 @@ All scripts accept `--device cuda` (default) and `--resume <path>` for checkpoin
 pip install -r requirements.txt
 ```
 
-Key dependencies: `torch>=2.0`, `torchvision`, `transformers` (BioClinicalBERT), `timm`, `scikit-learn`, `nltk`, `radgraph` (RadGraph F1 reward), `pyyaml`, `matplotlib`.
+Key dependencies: `torch>=2.0`, `torchvision`, `transformers` (BioClinicalBERT + CheXbert), `timm`, `scikit-learn`, `nltk`, `rouge-score`, `pycocoevalcap` (CIDEr), `radgraph` (RadGraph F1 reward), `pyyaml`, `matplotlib`.
 
 PyTorch API note: all mixed-precision uses `torch.amp.autocast` / `torch.amp.GradScaler` (PyTorch 2.0+ API, not the deprecated `torch.cuda.amp`).
 
@@ -154,7 +154,7 @@ LaTeX build artifacts are gitignored for `proposal/` only.
 
 1. **CheXzero baseline** (`src/models/chexzero.py`, `src/training/contrastive.py`): ResNet-50 + BioClinicalBERT contrastive training on IU X-Ray. Zero-shot classification on NIH-14 via PATHOLOGY_PROMPTS. Target: mean AUROC ≥ 0.75.
 
-2. **R2Gen baseline** (`src/models/r2gen.py`, `src/training/r2gen_trainer.py`): ResNet-101 visual extractor → relational memory → meshed decoder. Teacher-forced CE training. Target: BLEU-4 > 0.10, ROUGE-L > 0.30.
+2. **R2Gen baseline** (`src/models/r2gen.py`, `src/training/r2gen_trainer.py`): ResNet-101 visual extractor → relational memory → meshed decoder. Teacher-forced CE training. Evaluation: BLEU-4, ROUGE-L, METEOR, CIDEr (n-gram), RadGraph F1 (entity-level), CheXbert macro F1 (label-level). Target: BLEU-4 > 0.10, CIDEr > 0.20.
 
 3. **Extension 1 — Uncertainty-Aware Classification** (`src/models/uncertainty.py`): MC Dropout over CheXzero embeddings (n_samples=10) + conformal prediction calibration. Metrics: ECE reduction (target 20–30%), coverage ≥ 90% at α=0.10.
 
@@ -166,7 +166,7 @@ LaTeX build artifacts are gitignored for `proposal/` only.
 
 - **MIMIC-CXR avoided**: requires PhysioNet credentialing. IU X-Ray + NIH-14 are fully public.
 - **CheXzero chosen over GLORIA**: simpler codebase, better extensibility, equivalent performance.
-- **RadGraph F1 is the primary generation metric**: correlates with clinical accuracy (r=0.7) vs BLEU (r=0.3). BLEU/ROUGE reported for baseline comparison only.
+- **Three-tier generation evaluation**: (1) RadGraph F1 — entity/relation accuracy, primary clinical metric (r=0.7 with expert rating); (2) CheXbert macro F1 — label-level pathology agreement, standard complementary metric; (3) BLEU/ROUGE/METEOR/CIDEr — surface-overlap legacy metrics reported for comparability with prior work only.
 - **IU X-Ray image pairing**: images are resolved via exact filenames from XML `<parentImage URI>` elements (not glob matching) to avoid wrong-image pairings.
 - **SCST visual encoder frozen**: only decoder + memory parameters updated during RL fine-tuning to prevent feature collapse.
 - Compute budget: ~100–150 GPU hours total; single T4 (Colab) sufficient for demo runs.
@@ -182,3 +182,4 @@ External code repos:
 - CheXzero: https://github.com/rajpurkarlab/CheXzero
 - R2Gen: https://github.com/cuhksz-nlp/R2Gen
 - RadGraph: https://github.com/stanfordmlgroup/RadGraph
+- CheXbert: https://github.com/stanfordmlgroup/CheXbert (weights: `stanfordmlgroup/CheXbert` on HuggingFace)
