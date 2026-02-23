@@ -1,0 +1,43 @@
+# SCST fine-tuning configuration
+# Fine-tunes a pre-trained R2Gen checkpoint with Self-Critical Sequence Training.
+# Prerequisite: a trained r2gen/best.pt checkpoint from train_r2gen.py.
+
+model:
+  r2gen_checkpoint: "experiments/results/checkpoints/r2gen/best.pt"
+  # Must match the trained R2Gen checkpoint architecture exactly
+  d_model: 512
+  num_heads: 8
+  num_enc_layers: 3
+  num_dec_layers: 3
+  dim_ff: 2048
+  dropout: 0.1
+  num_mem_slots: 3
+  max_seq_len: 100
+
+training:
+  batch_size: 8
+  lr: 1.0e-5
+  weight_decay: 1.0e-4
+  epochs: 5
+  grad_clip: 5.0
+  lambda_fact: 0.1          # weight for RL loss: total = CE + lambda_fact * RL
+  temperature: 1.0          # decoder sampling temperature
+  freeze_encoder: true      # freeze ResNet-101 visual encoder during SCST
+  radgraph_model_type: "radgraph-xl"   # RadGraph reward model; fallback to BLEU-2
+
+paths:
+  iu_xray_dir: "data/iu_xray/"
+  checkpoint_dir: "experiments/results/checkpoints/scst/"
+  log_dir: "experiments/results/logs/"
+
+tokenizer:
+  vocab_save_path: "experiments/results/r2gen_vocab.json"
+  min_freq: 3
+
+data:
+  image_size: 224
+  val_split: 0.1
+  num_workers: 2
+
+logging:
+  run_name: "scst_finetune"

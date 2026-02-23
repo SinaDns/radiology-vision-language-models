@@ -1,13 +1,21 @@
-"""Extension 1: Uncertainty-Aware Classification.
+"""Uncertainty estimation for radiology VLMs.
 
-Wraps CheXzero with Monte Carlo Dropout for epistemic uncertainty
-estimation, plus conformal prediction calibration for coverage guarantees.
+Covers two model families:
 
-Key ideas:
-- MC Dropout: Enable dropout at inference time; run N forward passes to
-  estimate prediction mean and variance.
-- Conformal Prediction: Use a held-out calibration set to find a score
-  threshold that guarantees (1-α) coverage of true labels.
+1. **CheXzero classification** (Extension 1):
+   MC Dropout wrapper + conformal prediction calibration.
+
+2. **R2Gen generation** (Extension from r2gen_test.ipynb):
+   MC Dropout over the decoder produces stochastic report variants.
+   Two uncertainty metrics are computed per sample:
+   - *Disagreement*: fraction of unique decoded texts across T passes.
+   - *Token entropy*: mean Shannon entropy of the output distribution
+     at each token position, averaged over T passes.
+
+Key idea (both):
+  Enable Dropout layers at inference time (``m.train()`` while the rest
+  of the model remains in ``eval()``), run T stochastic forward passes,
+  and aggregate statistics.
 """
 
 import logging
@@ -144,6 +152,168 @@ class MCDropoutCheXzero(nn.Module):
             "mean_scores": mean_scores,
             "uncertainty": uncertainty,
             "mean_img_emb": mean_emb,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MC Dropout for R2Gen generation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _enable_dropout_only(model: nn.Module):
+    """Set model to eval but keep Dropout layers in train mode."""
+    model.eval()
+    for m in model.modules():
+        if isinstance(m, (nn.Dropout, nn.Dropout2d, nn.Dropout3d)):
+            m.train()
+
+
+class MCDropoutR2Gen:
+    """MC Dropout uncertainty estimation for R2Gen report generation.
+
+    Runs T stochastic decoder passes (dropout active) and computes two
+    uncertainty metrics per sample:
+
+    - **Disagreement**: fraction of unique decoded reports out of T passes.
+      High disagreement = the model is unsure *what* to generate.
+    - **Token entropy**: mean Shannon entropy of the output vocabulary
+      distribution at each non-padding position, averaged over T passes.
+      High entropy = the model is unsure *which word* to choose at each step.
+
+    Args:
+        model:     Trained :class:`~src.models.r2gen.R2GenModel`.
+        tokenizer: :class:`~src.data_loaders.report_tokenizer.ReportTokenizer`.
+        T:         Default number of stochastic forward passes (default 10).
+    """
+
+    def __init__(self, model: nn.Module, tokenizer, T: int = 10):
+        self.model     = model
+        self.tokenizer = tokenizer
+        self.T         = T
+        logger.info("MCDropoutR2Gen — T=%d", T)
+
+    @torch.no_grad()
+    def mc_generate(
+        self,
+        images: torch.Tensor,
+        T: Optional[int] = None,
+        max_length: int = 60,
+        temperature: float = 1.0,
+    ) -> dict:
+        """Run T stochastic passes and return uncertainty metrics.
+
+        Args:
+            images:     ``(B, 3, H, W)`` image batch.
+            T:          Number of MC passes (overrides default).
+            max_length: Maximum generated sequence length.
+            temperature: Softmax temperature for sampling.
+
+        Returns:
+            Dict with:
+            - ``texts``        ``(T, B)`` decoded report strings per pass.
+            - ``disagreement`` ``(B,)``  fraction of unique texts / T.
+            - ``entropy``      ``(B,)``  mean token entropy across T passes.
+        """
+        n      = T or self.T
+        device = next(self.model.parameters()).device
+
+        _enable_dropout_only(self.model)
+        logger.debug("mc_generate — T=%d B=%d max_length=%d", n, images.size(0), max_length)
+
+        seqs_list: list[torch.Tensor] = []
+        ents_list: list[torch.Tensor] = []
+
+        for pass_idx in range(n):
+            # sample() maintains computation graph, but we use no_grad here
+            # because we only need entropy (no SCST gradient needed)
+            seq, log_probs = self.model.sample(
+                images,
+                bos_id=self.tokenizer.bos_id,
+                eos_id=self.tokenizer.eos_id,
+                max_length=max_length,
+                temperature=temperature,
+            )                                          # (B, L), (B, L, V)
+
+            seqs_list.append(seq.cpu())
+
+            # Token entropy: H = -sum_v p_v * log(p_v)
+            p   = log_probs.exp()                      # (B, L, V)
+            ent = -(p * log_probs).sum(dim=-1)         # (B, L)  entropy per position
+            mask    = (seq != self.tokenizer.pad_id).float().cpu()
+            avg_ent = (ent.cpu() * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1.0)
+            ents_list.append(avg_ent)                  # (B,)
+
+            if (pass_idx + 1) % 5 == 0:
+                logger.debug("MC pass %d/%d done", pass_idx + 1, n)
+
+        # Restore full eval mode
+        self.model.eval()
+
+        # Decode all passes to text
+        texts = np.array([
+            [self.tokenizer.decode(row.tolist()) for row in seqs_list[t]]
+            for t in range(n)
+        ])                                             # (T, B)
+
+        B = texts.shape[1]
+        disagreement = np.array(
+            [len(set(texts[:, i])) / n for i in range(B)]
+        )                                              # (B,)
+
+        entropy = torch.stack(ents_list, dim=0).mean(dim=0).numpy()  # (B,)
+
+        logger.info(
+            "MCDropoutR2Gen — mean_disagreement=%.4f mean_entropy=%.4f",
+            disagreement.mean(), entropy.mean(),
+        )
+        return {
+            "texts":        texts,
+            "disagreement": disagreement,
+            "entropy":      entropy,
+        }
+
+    def run_on_loader(
+        self,
+        loader,
+        T: Optional[int] = None,
+        max_length: int = 60,
+    ) -> dict:
+        """Run MC Dropout uncertainty estimation over a full DataLoader.
+
+        Args:
+            loader:     DataLoader yielding ``{image, study_id, ...}`` dicts.
+            T:          MC passes per batch.
+            max_length: Decoding length.
+
+        Returns:
+            Dict with ``study_ids``, ``disagreement`` ``(N,)``,
+            ``entropy`` ``(N,)``, ``representative_texts`` ``(N,)``
+            (first pass output for each sample).
+        """
+        import torch
+        device = next(self.model.parameters()).device
+
+        all_ids, all_disag, all_ent, all_texts = [], [], [], []
+
+        for batch_idx, batch in enumerate(loader):
+            images = batch["image"].to(device)
+            out    = self.mc_generate(images, T=T, max_length=max_length)
+
+            all_ids.extend(list(batch.get("study_id", ["?"] * images.size(0))))
+            all_disag.extend(out["disagreement"].tolist())
+            all_ent.extend(out["entropy"].tolist())
+            all_texts.extend([out["texts"][0, i] for i in range(images.size(0))])
+
+            if (batch_idx + 1) % 10 == 0:
+                logger.info(
+                    "MC uncertainty — batch %d/%d processed",
+                    batch_idx + 1, len(loader),
+                )
+
+        return {
+            "study_ids":          all_ids,
+            "disagreement":       np.array(all_disag),
+            "entropy":            np.array(all_ent),
+            "representative_texts": all_texts,
         }
 
 

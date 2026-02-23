@@ -434,6 +434,129 @@ class R2GenModel(nn.Module):
         visual, memory = self.encode(images)
         return self.decode(input_ids, visual, memory)
 
+    # ── Stochastic sampling (SCST training) ─────────────────────────────────
+
+    def sample(
+        self,
+        images: torch.Tensor,
+        bos_id: int,
+        eos_id: int,
+        max_length: Optional[int] = None,
+        temperature: float = 1.0,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Stochastic (multinomial) sampling for SCST policy-gradient training.
+
+        Decodes step-by-step; at each step the next token is drawn from the
+        categorical distribution defined by the decoder output.  The full
+        log-softmax distribution at every step is retained so the caller can
+        compute ``sum_t log p(a_t)`` for the REINFORCE gradient.
+
+        Args:
+            images:      ``(B, 3, H, W)``
+            bos_id:      Beginning-of-sequence token ID.
+            eos_id:      End-of-sequence token ID.
+            max_length:  Maximum tokens to generate.
+            temperature: Softmax temperature (1.0 = unmodified).
+
+        Returns:
+            Tuple ``(seq, log_probs)``
+            - ``seq``       ``(B, max_length)`` sampled token IDs,
+                            ``pad_id`` after the first EOS per row.
+            - ``log_probs`` ``(B, max_length, vocab_size)`` log-softmax
+                            distribution at each step (differentiable).
+        """
+        if max_length is None:
+            max_length = self.max_seq_len
+
+        B      = images.size(0)
+        device = images.device
+        visual, memory = self.encode(images)
+
+        seqs          = torch.full((B, 1), bos_id, dtype=torch.long, device=device)
+        all_log_probs: list[torch.Tensor] = []
+        done          = torch.zeros(B, dtype=torch.bool, device=device)
+
+        for _ in range(max_length):
+            logits    = self.decode(seqs, visual, memory)           # (B, t, V)
+            step_log  = F.log_softmax(
+                logits[:, -1, :] / max(temperature, 1e-8), dim=-1
+            )                                                        # (B, V)
+            all_log_probs.append(step_log.unsqueeze(1))             # (B, 1, V)
+
+            # Sample next token (no gradient through discrete choice)
+            with torch.no_grad():
+                next_tok = torch.multinomial(
+                    step_log.exp(), num_samples=1
+                )                                                    # (B, 1)
+                next_tok[done] = self.pad_id
+
+            seqs = torch.cat([seqs, next_tok], dim=1)
+            done = done | (next_tok.squeeze(-1) == eos_id)
+            if done.all():
+                break
+
+        seq       = seqs[:, 1:]                                      # remove BOS
+        log_probs = torch.cat(all_log_probs, dim=1)                 # (B, L, V)
+
+        # Pad to max_length if decoding stopped early
+        L = seq.size(1)
+        if L < max_length:
+            seq       = F.pad(seq,       (0, max_length - L),        value=self.pad_id)
+            log_probs = F.pad(log_probs, (0, 0, 0, max_length - L), value=0.0)
+
+        return seq[:, :max_length], log_probs[:, :max_length]
+
+    # ── Greedy decoding (SCST baseline) ─────────────────────────────────────
+
+    @torch.no_grad()
+    def greedy_decode(
+        self,
+        images: torch.Tensor,
+        bos_id: int,
+        eos_id: int,
+        max_length: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Deterministic greedy (argmax) decoding for the SCST baseline.
+
+        Used as the ``reward_baseline`` in Self-Critical Sequence Training:
+        the stochastic sample is compared against the greedy decode of the
+        *same* model state to compute the advantage.
+
+        Args:
+            images:     ``(B, 3, H, W)``
+            bos_id:     Beginning-of-sequence token ID.
+            eos_id:     End-of-sequence token ID.
+            max_length: Maximum tokens to decode.
+
+        Returns:
+            ``(B, max_length)`` greedy token IDs, ``pad_id`` after EOS.
+        """
+        if max_length is None:
+            max_length = self.max_seq_len
+
+        B      = images.size(0)
+        device = images.device
+        visual, memory = self.encode(images)
+
+        seqs = torch.full((B, 1), bos_id, dtype=torch.long, device=device)
+        done = torch.zeros(B, dtype=torch.bool, device=device)
+
+        for _ in range(max_length):
+            logits   = self.decode(seqs, visual, memory)             # (B, t, V)
+            next_tok = logits[:, -1, :].argmax(dim=-1, keepdim=True) # (B, 1)
+            next_tok[done] = self.pad_id
+            seqs = torch.cat([seqs, next_tok], dim=1)
+            done = done | (next_tok.squeeze(-1) == eos_id)
+            if done.all():
+                break
+
+        seq = seqs[:, 1:]                                            # remove BOS
+        L   = seq.size(1)
+        if L < max_length:
+            seq = F.pad(seq, (0, max_length - L), value=self.pad_id)
+
+        return seq[:, :max_length]
+
     # ── Beam search (inference) ──────────────────────────────────────────────
 
     @torch.no_grad()
