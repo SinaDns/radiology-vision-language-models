@@ -49,13 +49,13 @@ This document provides a quick reference to all papers reviewed for the project,
 | Paper | Year | Venue | Code | Relevance | Status | Notes |
 |-------|------|-------|------|-----------|--------|-------|
 | **RadGraph** | 2023 | NEJM AI | ⭐⭐⭐ | 🔥🔥🔥 | ✅ | **Essential** - Knowledge graph IE tool |
-| **CheXbert** | 2020 | EMNLP | ⭐⭐⭐ | 🔥🔥🔥 | ⏳ | Label extraction from reports |
+| **CheXbert** | 2020 | EMNLP | ⭐⭐⭐ | 🔥🔥🔥 | ✅ | Label extraction from reports — **implemented** in `compute_chexbert_metrics()` |
 | **GREEN** | 2022 | EMNLP | ⭐ | 🔥🔥 | ⏳ | Entity-level grounding |
 | **FactualGAN** | 2022 | MICCAI | ⭐ | 🔥 | 📝 | Adversarial factuality |
 | **X-REM** | 2023 | ACL | ⭐ | 🔥 | 📝 | Error correction |
 | **BLEU/ROUGE** | Various | NLG | ⭐⭐⭐ | 🔥 | 📝 | Legacy metrics (use cautiously) |
 
-**Summary:** RadGraph F1 is mandatory for report generation evaluation. CheXbert provides complementary label-level accuracy.
+**Summary:** RadGraph F1 (entity/relation level) and CheXbert macro F1 (label level) are both mandatory for report generation evaluation. CIDEr provides the standard captioning benchmark score. BLEU/ROUGE are legacy metrics retained for prior-work comparability only.
 
 ---
 
@@ -123,7 +123,7 @@ This document provides a quick reference to all papers reviewed for the project,
 5. ✅ RadGraph (NEJM AI 2023) - Completed detailed review
 
 ### **Should Read (Next Week):**
-6. ⏳ CheXbert (EMNLP 2020) - Evaluation metric
+6. ✅ CheXbert (EMNLP 2020) - Evaluation metric — implemented
 7. ⏳ BioViL (ECCV 2022) - RadGraph pretraining
 8. ⏳ CMN (ACL 2021) - Report generation extension
 9. ⏳ MC Dropout (ICML 2016) - Uncertainty quantification
@@ -153,7 +153,8 @@ This document provides a quick reference to all papers reviewed for the project,
 
 ### **Evaluation:**
 - **Must use:** RadGraph F1 ⭐⭐⭐
-- **Must use:** CheXbert accuracy ⭐⭐⭐
+- **Must use:** CheXbert macro F1 ⭐⭐⭐ — ✅ implemented in `src/evaluation/generation_metrics.py`
+- **Must use:** CIDEr ⭐⭐⭐ — ✅ implemented via `pycocoevalcap`
 - Legacy: BLEU, ROUGE (report for comparison only)
 
 ### **Uncertainty:**
@@ -178,7 +179,12 @@ CheXzero requires:
 R2Gen requires:
 - PyTorch >= 1.7
 - torchvision
-- pycocoevalcap (for BLEU/CIDEr)
+- pycocoevalcap (for CIDEr) — ✅ added to requirements.txt
+
+CheXbert evaluation requires:
+- transformers (BertModel, BertTokenizer)
+- huggingface_hub (auto-downloads stanfordmlgroup/CheXbert, ~440 MB)
+- scikit-learn (precision/recall/f1)
 
 RadGraph requires:
 - DyGIE++ model

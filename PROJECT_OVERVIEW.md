@@ -175,8 +175,10 @@ radiology-vision-language-models/
 
 1. **CheXzero baseline** — ResNet-50 + BioClinicalBERT contrastive training
 2. **R2Gen baseline** — ResNet-101 + relational memory + meshed decoder
-3. **Extension 1** — MC Dropout uncertainty + conformal prediction
-4. **Extension 2** — Proxy factuality loss + SCST fine-tuning
+3. **CIDEr metric** — via `pycocoevalcap`, integrated into `compute_all_metrics()`
+4. **CheXbert evaluation** — `stanfordmlgroup/CheXbert` label-level F1 via `compute_chexbert_metrics()`
+5. **Extension 1** — MC Dropout uncertainty + conformal prediction
+6. **Extension 2** — Proxy factuality loss + SCST fine-tuning
 5. **Extension 3** — Domain gap analysis + few-shot linear probe
 6. **Google Colab notebooks** — 4 notebooks, all T4-compatible
 7. **CLI scripts** — 8 training/evaluation entry points
@@ -248,7 +250,7 @@ Save all checkpoints to Google Drive between sessions.
 
 2. **Does RadGraph-based factuality loss reduce hallucination in report generation?**
    - Method: Proxy clinical keyword loss + SCST with RadGraph F1 reward
-   - Target: RadGraph F1 improvement from baseline
+   - Target: RadGraph F1 improvement from baseline; CheXbert macro F1 improvement
 
 3. **How robust are medical VLMs to cross-institutional distribution shift?**
    - Method: Zero-shot IU X-Ray → NIH-14 + few-shot linear probe

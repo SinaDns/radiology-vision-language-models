@@ -198,8 +198,9 @@ After comprehensive review of medical vision-language models, we recommend **Che
 - Cross-dataset zero-shot AUROC on NIH-14
 
 **R2Gen on IU X-Ray** — implemented in `src/models/r2gen.py` + `src/training/r2gen_trainer.py`
-- Report generation with BLEU/ROUGE/METEOR evaluation
+- Report generation with BLEU/ROUGE/METEOR/CIDEr evaluation (`src/evaluation/generation_metrics.py`)
 - RadGraph F1 evaluation (proxy via `compute_radgraph_f1`)
+- CheXbert label-level F1 evaluation (`compute_chexbert_metrics` — loads `stanfordmlgroup/CheXbert`)
 
 ### Phase 2: Novel Contributions (Months 3-5) ✅ (all three implemented)
 
@@ -295,8 +296,8 @@ After comprehensive review of medical vision-language models, we recommend **Che
 ### Track B: Factual Report Generation
 
 **Expected Results:**
-- R2Gen baseline: BLEU-4 = 0.20, RadGraph F1 = 0.42
-- Factual R2Gen: BLEU-4 = 0.19, RadGraph F1 = 0.48 (+6%)
+- R2Gen baseline: BLEU-4 = 0.20, CIDEr = 0.30, RadGraph F1 = 0.42, CheXbert macro F1 ≈ 0.30
+- Factual R2Gen: BLEU-4 = 0.19, RadGraph F1 = 0.48 (+6%), CheXbert macro F1 ≈ 0.33 (+10%)
 - Reduced hallucination: 25% fewer false entities
 
 **Paper Title:** "Factuality-Guided Radiology Report Generation with Knowledge Graph Supervision"  
