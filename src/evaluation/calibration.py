@@ -144,13 +144,8 @@ def calibration_analysis(
     # Try RadGraph F1 first
     for rg_model in ["radgraph-xl", "radgraph"]:
         try:
-            # Compatibility shim: transformers>=4.46 removed encode_plus,
-            # which radgraph's vendored allennlp still calls.
-            from transformers import PreTrainedTokenizerBase as _PTTB
-            if not hasattr(_PTTB, "encode_plus"):
-                _PTTB.encode_plus = lambda self, text, text_pair=None, **kw: self(
-                    text, text_pair=text_pair, **kw
-                )
+            from src.utils.radgraph_compat import patch_transformers_for_radgraph
+            patch_transformers_for_radgraph()
 
             from radgraph import F1RadGraph
             f1fn = F1RadGraph(reward_level="all", model_type=rg_model)
