@@ -294,10 +294,24 @@ def _load_chexbert_labeler(device: str = "cpu"):
         )
         state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
-        # Some checkpoints are saved with nn.DataParallel, which adds a "module."
-        # prefix to every key.  Strip it so the keys match our plain module.
+        # Log a sample of raw keys to help diagnose naming mismatches.
+        raw_sample = list(state_dict.keys())[:5]
+        logger.info("chexbert.pth raw key sample: %s", raw_sample)
+
+        # Strip DataParallel "module." prefix if present.
         if all(k.startswith("module.") for k in state_dict):
             state_dict = {k[len("module."):]: v for k, v in state_dict.items()}
+            logger.info("Stripped DataParallel 'module.' prefix from checkpoint keys.")
+
+        # Original Stanford CheXbert code names the BERT backbone "bert_encoder"
+        # rather than "bert".  Remap so keys match our _CheXbertLabeler.
+        if any(k.startswith("bert_encoder.") for k in state_dict):
+            state_dict = {
+                (k.replace("bert_encoder.", "bert.", 1)
+                 if k.startswith("bert_encoder.") else k): v
+                for k, v in state_dict.items()
+            }
+            logger.info("Remapped checkpoint keys: bert_encoder.* → bert.*")
 
         # strict=False: the saved checkpoint may also contain
         # linear_heads_uncertain.* keys which we intentionally skip.
@@ -308,8 +322,9 @@ def _load_chexbert_labeler(device: str = "cpu"):
         )
         logger.info(
             "CheXbert loaded — %d/14 head weight tensors present, "
-            "%d unexpected keys ignored.",
+            "%d missing keys, %d unexpected keys ignored.",
             loaded_heads // 2,   # weight + bias per head → divide by 2
+            len(missing),
             len(unexpected),
         )
         if missing:
