@@ -166,6 +166,15 @@ def compute_radgraph_f1(
         Dict with ``radgraph_f1`` (mean over all samples).
     """
     try:
+        # Compatibility shim: transformers>=4.46 removed encode_plus, which
+        # radgraph's vendored allennlp still calls.  Restore it as a thin
+        # wrapper around __call__ so that F1RadGraph can be instantiated.
+        from transformers import PreTrainedTokenizerBase as _PTTB
+        if not hasattr(_PTTB, "encode_plus"):
+            _PTTB.encode_plus = lambda self, text, text_pair=None, **kw: self(
+                text, text_pair=text_pair, **kw
+            )
+
         from radgraph import F1RadGraph
         scorer = F1RadGraph(reward_level=reward_level)
 

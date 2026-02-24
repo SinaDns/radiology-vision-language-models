@@ -164,6 +164,14 @@ class SCSTTrainer:
         self.f1radgraph = None
         for attempt in [rg_model, "radgraph"]:
             try:
+                # Compatibility shim: transformers>=4.46 removed encode_plus,
+                # which radgraph's vendored allennlp still calls.
+                from transformers import PreTrainedTokenizerBase as _PTTB
+                if not hasattr(_PTTB, "encode_plus"):
+                    _PTTB.encode_plus = lambda self, text, text_pair=None, **kw: self(
+                        text, text_pair=text_pair, **kw
+                    )
+
                 from radgraph import F1RadGraph
                 self.f1radgraph = F1RadGraph(reward_level="all", model_type=attempt)
                 self.log.info("RadGraph loaded (%s) — using RG_ER as SCST reward", attempt)
