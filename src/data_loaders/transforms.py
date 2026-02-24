@@ -8,6 +8,7 @@ def get_train_transforms(image_size: int = 320) -> transforms.Compose:
     return transforms.Compose([
         transforms.Grayscale(num_output_channels=3),
         transforms.Resize(image_size),
+        transforms.CenterCrop(image_size),   # ensure fixed square size before augmentation
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(10),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
