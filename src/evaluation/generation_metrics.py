@@ -292,16 +292,26 @@ def _load_chexbert_labeler(device: str = "cpu"):
             repo_id="StanfordAIMI/RRG_scorers",
             filename="chexbert.pth",
         )
-        state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        raw = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
-        # Log a sample of raw keys to help diagnose naming mismatches.
-        raw_sample = list(state_dict.keys())[:5]
-        logger.info("chexbert.pth raw key sample: %s", raw_sample)
+        # Log top-level keys so naming mismatches are immediately visible.
+        top_keys = list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__
+        logger.info("chexbert.pth top-level keys: %s", top_keys)
+
+        # Unwrap training-checkpoint wrappers (e.g. {"model_state_dict": {...}}).
+        state_dict = raw
+        for _wrapper in ("model_state_dict", "state_dict", "model"):
+            if (isinstance(state_dict, dict)
+                    and _wrapper in state_dict
+                    and isinstance(state_dict[_wrapper], dict)):
+                state_dict = state_dict[_wrapper]
+                logger.info("Unwrapped checkpoint: used key '%s'", _wrapper)
+                break
 
         # Strip DataParallel "module." prefix if present.
-        if all(k.startswith("module.") for k in state_dict):
+        if isinstance(state_dict, dict) and all(k.startswith("module.") for k in state_dict):
             state_dict = {k[len("module."):]: v for k, v in state_dict.items()}
-            logger.info("Stripped DataParallel 'module.' prefix from checkpoint keys.")
+            logger.info("Stripped DataParallel 'module.' prefix.")
 
         # Original Stanford CheXbert code names the BERT backbone "bert_encoder"
         # rather than "bert".  Remap so keys match our _CheXbertLabeler.
