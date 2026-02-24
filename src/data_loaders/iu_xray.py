@@ -172,7 +172,7 @@ class IUXrayDataset(Dataset):
         return samples
 
     def _parse_image_uris(self, xml_path: Path) -> list[str]:
-        """Return the list of image filenames declared in a study XML.
+        """Return image filenames declared in a study XML.
 
         Handles two ``<parentImage>`` formats found in the IU X-Ray release:
 

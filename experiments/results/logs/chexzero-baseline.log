@@ -1,0 +1,263 @@
+2026-02-24 09:25:23 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:25:23 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:25:29 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:25:34 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:25:34 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:29:41 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:29:41 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:35:23 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:35:23 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:35:48 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:35:51 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:35:51 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=1.08/1.14 GB (alloc/reserved) ===
+2026-02-24 09:40:52 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:40:52 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:40:53 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:41:02 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:41:02 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:41:04 [ERROR] Forward pass failed — epoch=0 batch=0 images=[32, 3, 320, 320] input_ids=[32, 197]: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 78.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.84 GiB memory in use. Of the allocated memory 1.27 GiB is allocated by PyTorch, and 80.89 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/home/dev/KD-project/radiology-vision-language-models/src/training/contrastive.py", line 156, in train_epoch
+    logits_i, logits_t = self.model(images, input_ids, attention_mask)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 160, in forward
+    image_features = self.encode_image(images)           # (B, D)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 134, in encode_image
+    return self.image_encoder(images)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 53, in forward
+    features = self.backbone(images)                    # (B, 2048)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 285, in forward
+    return self._forward_impl(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 273, in _forward_impl
+    x = self.layer1(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 158, in forward
+    identity = self.downsample(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 194, in forward
+    return F.batch_norm(
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/functional.py", line 2846, in batch_norm
+    return torch.batch_norm(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 78.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.84 GiB memory in use. Of the allocated memory 1.27 GiB is allocated by PyTorch, and 80.89 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-02-24 09:41:40 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:41:40 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=1.36/1.45 GB (alloc/reserved) ===
+2026-02-24 09:41:41 [ERROR] Forward pass failed — epoch=0 batch=0 images=[32, 3, 320, 320] input_ids=[32, 145]: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 40.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.88 GiB memory in use. Of the allocated memory 1.32 GiB is allocated by PyTorch, and 62.05 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/home/dev/KD-project/radiology-vision-language-models/src/training/contrastive.py", line 156, in train_epoch
+    logits_i, logits_t = self.model(images, input_ids, attention_mask)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 160, in forward
+    image_features = self.encode_image(images)           # (B, D)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 134, in encode_image
+    return self.image_encoder(images)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 53, in forward
+    features = self.backbone(images)                    # (B, 2048)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 285, in forward
+    return self._forward_impl(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 268, in _forward_impl
+    x = self.conv1(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 553, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 548, in _conv_forward
+    return F.conv2d(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 40.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.88 GiB memory in use. Of the allocated memory 1.32 GiB is allocated by PyTorch, and 62.05 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-02-24 09:43:19 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:43:19 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=1.40/1.49 GB (alloc/reserved) ===
+2026-02-24 09:43:19 [ERROR] Forward pass failed — epoch=0 batch=0 images=[32, 3, 320, 320] input_ids=[32, 150]: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 2.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.91 GiB memory in use. Of the allocated memory 1.36 GiB is allocated by PyTorch, and 61.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/home/dev/KD-project/radiology-vision-language-models/src/training/contrastive.py", line 156, in train_epoch
+    logits_i, logits_t = self.model(images, input_ids, attention_mask)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 160, in forward
+    image_features = self.encode_image(images)           # (B, D)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 134, in encode_image
+    return self.image_encoder(images)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/src/models/chexzero.py", line 53, in forward
+    features = self.backbone(images)                    # (B, 2048)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 285, in forward
+    return self._forward_impl(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torchvision/models/resnet.py", line 268, in _forward_impl
+    x = self.conv1(x)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 553, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+  File "/home/dev/KD-project/radiology-vision-language-models/.venv/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 548, in _conv_forward
+    return F.conv2d(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 100.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 2.31 MiB is free. Process 3942011 has 77.32 GiB memory in use. Including non-PyTorch memory, this process has 1.91 GiB memory in use. Of the allocated memory 1.36 GiB is allocated by PyTorch, and 61.97 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+2026-02-24 09:51:56 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:51:56 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:52:28 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:53:58 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:53:58 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:54:00 [INFO] Epoch 0 [0/208] loss=3.4943 grad_norm=4.493 logit_scale=14.285 batch_ms=1463 gpu_mem=2.21/6.98 GB (alloc/reserved)
+2026-02-24 09:54:08 [INFO] Epoch 0 [50/208] loss=3.3403 grad_norm=11.553 logit_scale=14.273 batch_ms=104 gpu_mem=2.24/8.72 GB (alloc/reserved)
+2026-02-24 09:54:16 [INFO] Epoch 0 [100/208] loss=3.2598 grad_norm=12.337 logit_scale=14.265 batch_ms=100 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:54:24 [INFO] Epoch 0 [150/208] loss=3.0211 grad_norm=9.159 logit_scale=14.262 batch_ms=119 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:54:32 [INFO] Epoch 0 [200/208] loss=2.7358 grad_norm=10.504 logit_scale=14.261 batch_ms=113 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:54:34 [INFO] === Epoch 0 DONE — avg_train_loss=3.1953 epoch_time=35.3s ===
+2026-02-24 09:54:34 [INFO] Validation — 24 batches
+2026-02-24 09:54:37 [INFO] Validation done — avg_val_loss=2.9733 time=3.3s
+2026-02-24 09:54:37 [INFO] Epoch 0 summary | train_loss=3.1953 val_loss=2.9733 best_val=inf
+2026-02-24 09:54:40 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/best.pt  (epoch=0 val_loss=2.9733)
+2026-02-24 09:54:40 [INFO] New best checkpoint at epoch 0
+2026-02-24 09:54:43 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=0 val_loss=2.9733)
+2026-02-24 09:54:43 [INFO] === Epoch 1/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:54:44 [INFO] Epoch 1 [0/208] loss=2.6891 grad_norm=12.911 logit_scale=14.262 batch_ms=150 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:54:52 [INFO] Epoch 1 [50/208] loss=2.5754 grad_norm=11.240 logit_scale=14.262 batch_ms=113 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:55:00 [INFO] Epoch 1 [100/208] loss=2.8481 grad_norm=14.933 logit_scale=14.264 batch_ms=122 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:55:08 [INFO] Epoch 1 [150/208] loss=3.1470 grad_norm=12.539 logit_scale=14.262 batch_ms=116 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:55:16 [INFO] Epoch 1 [200/208] loss=2.6851 grad_norm=11.595 logit_scale=14.261 batch_ms=99 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:55:17 [INFO] === Epoch 1 DONE — avg_train_loss=2.6910 epoch_time=34.1s ===
+2026-02-24 09:55:17 [INFO] Validation — 24 batches
+2026-02-24 09:55:21 [INFO] Validation done — avg_val_loss=2.8827 time=3.5s
+2026-02-24 09:55:21 [INFO] Epoch 1 summary | train_loss=2.6910 val_loss=2.8827 best_val=2.9733
+2026-02-24 09:55:24 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/best.pt  (epoch=1 val_loss=2.8827)
+2026-02-24 09:55:24 [INFO] New best checkpoint at epoch 1
+2026-02-24 09:55:28 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=1 val_loss=2.8827)
+2026-02-24 09:55:28 [INFO] === Epoch 2/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:55:28 [INFO] Epoch 2 [0/208] loss=2.3139 grad_norm=11.042 logit_scale=14.262 batch_ms=143 gpu_mem=2.21/8.72 GB (alloc/reserved)
+2026-02-24 09:55:37 [INFO] Epoch 2 [50/208] loss=2.3599 grad_norm=12.799 logit_scale=14.269 batch_ms=99 gpu_mem=2.21/8.72 GB (alloc/reserved)
+2026-02-24 09:55:45 [INFO] Epoch 2 [100/208] loss=2.7332 grad_norm=12.837 logit_scale=14.272 batch_ms=105 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:55:53 [INFO] Epoch 2 [150/208] loss=2.2287 grad_norm=14.261 logit_scale=14.277 batch_ms=118 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:56:01 [INFO] Epoch 2 [200/208] loss=2.1416 grad_norm=13.438 logit_scale=14.279 batch_ms=103 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:56:03 [INFO] === Epoch 2 DONE — avg_train_loss=2.2733 epoch_time=35.0s ===
+2026-02-24 09:56:03 [INFO] Validation — 24 batches
+2026-02-24 09:56:06 [INFO] Validation done — avg_val_loss=2.9712 time=3.7s
+2026-02-24 09:56:06 [INFO] Epoch 2 summary | train_loss=2.2733 val_loss=2.9712 best_val=2.8827
+2026-02-24 09:56:10 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=2 val_loss=2.9712)
+2026-02-24 09:56:10 [INFO] === Epoch 3/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:56:11 [INFO] Epoch 3 [0/208] loss=1.9384 grad_norm=14.878 logit_scale=14.279 batch_ms=183 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:56:19 [INFO] Epoch 3 [50/208] loss=1.7383 grad_norm=16.878 logit_scale=14.296 batch_ms=108 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:56:27 [INFO] Epoch 3 [100/208] loss=1.9655 grad_norm=15.438 logit_scale=14.307 batch_ms=119 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:56:35 [INFO] Epoch 3 [150/208] loss=2.1076 grad_norm=17.247 logit_scale=14.316 batch_ms=106 gpu_mem=2.21/8.72 GB (alloc/reserved)
+2026-02-24 09:56:44 [INFO] Epoch 3 [200/208] loss=1.7886 grad_norm=13.277 logit_scale=14.320 batch_ms=125 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:56:45 [INFO] === Epoch 3 DONE — avg_train_loss=1.9151 epoch_time=34.5s ===
+2026-02-24 09:56:45 [INFO] Validation — 24 batches
+2026-02-24 09:56:48 [INFO] Validation done — avg_val_loss=2.9678 time=3.5s
+2026-02-24 09:56:48 [INFO] Epoch 3 summary | train_loss=1.9151 val_loss=2.9678 best_val=2.8827
+2026-02-24 09:56:53 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=3 val_loss=2.9678)
+2026-02-24 09:56:53 [INFO] === Epoch 4/9 START — batches=208 gpu_mem=2.19/8.72 GB (alloc/reserved) ===
+2026-02-24 09:56:53 [INFO] Epoch 4 [0/208] loss=1.9585 grad_norm=14.101 logit_scale=14.321 batch_ms=185 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:57:02 [INFO] Epoch 4 [50/208] loss=1.4212 grad_norm=13.401 logit_scale=14.342 batch_ms=107 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:57:10 [INFO] Epoch 4 [100/208] loss=1.8399 grad_norm=19.332 logit_scale=14.354 batch_ms=115 gpu_mem=2.21/8.72 GB (alloc/reserved)
+2026-02-24 09:57:18 [INFO] Epoch 4 [150/208] loss=2.2119 grad_norm=15.737 logit_scale=14.364 batch_ms=105 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:57:27 [INFO] Epoch 4 [200/208] loss=1.7311 grad_norm=14.463 logit_scale=14.375 batch_ms=115 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:57:28 [INFO] === Epoch 4 DONE — avg_train_loss=1.6490 epoch_time=35.6s ===
+2026-02-24 09:57:28 [INFO] Validation — 24 batches
+2026-02-24 09:57:32 [INFO] Validation done — avg_val_loss=3.0216 time=3.5s
+2026-02-24 09:57:32 [INFO] Epoch 4 summary | train_loss=1.6490 val_loss=3.0216 best_val=2.8827
+2026-02-24 09:57:36 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=4 val_loss=3.0216)
+2026-02-24 09:57:36 [INFO] === Epoch 5/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:57:36 [INFO] Epoch 5 [0/208] loss=1.2538 grad_norm=12.361 logit_scale=14.376 batch_ms=149 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:57:44 [INFO] Epoch 5 [50/208] loss=1.3199 grad_norm=13.111 logit_scale=14.407 batch_ms=102 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:57:53 [INFO] Epoch 5 [100/208] loss=1.4358 grad_norm=16.496 logit_scale=14.430 batch_ms=112 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:58:01 [INFO] Epoch 5 [150/208] loss=1.6410 grad_norm=15.342 logit_scale=14.451 batch_ms=120 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:58:10 [INFO] Epoch 5 [200/208] loss=1.5545 grad_norm=18.536 logit_scale=14.465 batch_ms=107 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:58:12 [INFO] === Epoch 5 DONE — avg_train_loss=1.3825 epoch_time=35.8s ===
+2026-02-24 09:58:12 [INFO] Validation — 24 batches
+2026-02-24 09:58:15 [INFO] Validation done — avg_val_loss=3.1473 time=3.6s
+2026-02-24 09:58:15 [INFO] Epoch 5 summary | train_loss=1.3825 val_loss=3.1473 best_val=2.8827
+2026-02-24 09:58:19 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=5 val_loss=3.1473)
+2026-02-24 09:58:19 [INFO] === Epoch 6/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:58:20 [INFO] Epoch 6 [0/208] loss=1.1750 grad_norm=14.389 logit_scale=14.468 batch_ms=194 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:58:28 [INFO] Epoch 6 [50/208] loss=0.9760 grad_norm=13.720 logit_scale=14.496 batch_ms=106 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:58:37 [INFO] Epoch 6 [100/208] loss=0.8286 grad_norm=10.648 logit_scale=14.523 batch_ms=121 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:58:45 [INFO] Epoch 6 [150/208] loss=0.9278 grad_norm=12.728 logit_scale=14.551 batch_ms=111 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:58:53 [INFO] Epoch 6 [200/208] loss=1.2784 grad_norm=13.131 logit_scale=14.570 batch_ms=134 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:58:54 [INFO] === Epoch 6 DONE — avg_train_loss=1.2128 epoch_time=35.0s ===
+2026-02-24 09:58:54 [INFO] Validation — 24 batches
+2026-02-24 09:58:58 [INFO] Validation done — avg_val_loss=3.2518 time=3.5s
+2026-02-24 09:58:58 [INFO] Epoch 6 summary | train_loss=1.2128 val_loss=3.2518 best_val=2.8827
+2026-02-24 09:59:01 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=6 val_loss=3.2518)
+2026-02-24 09:59:01 [INFO] === Epoch 7/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:59:02 [INFO] Epoch 7 [0/208] loss=1.1229 grad_norm=11.621 logit_scale=14.574 batch_ms=150 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:10 [INFO] Epoch 7 [50/208] loss=1.2153 grad_norm=15.694 logit_scale=14.603 batch_ms=117 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:18 [INFO] Epoch 7 [100/208] loss=1.2459 grad_norm=12.162 logit_scale=14.628 batch_ms=107 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:26 [INFO] Epoch 7 [150/208] loss=1.3279 grad_norm=14.953 logit_scale=14.655 batch_ms=97 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:34 [INFO] Epoch 7 [200/208] loss=1.1487 grad_norm=12.413 logit_scale=14.680 batch_ms=112 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:35 [INFO] === Epoch 7 DONE — avg_train_loss=1.0868 epoch_time=34.1s ===
+2026-02-24 09:59:35 [INFO] Validation — 24 batches
+2026-02-24 09:59:39 [INFO] Validation done — avg_val_loss=3.4058 time=3.7s
+2026-02-24 09:59:39 [INFO] Epoch 7 summary | train_loss=1.0868 val_loss=3.4058 best_val=2.8827
+2026-02-24 09:59:43 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=7 val_loss=3.4058)
+2026-02-24 09:59:43 [INFO] === Epoch 8/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 09:59:44 [INFO] Epoch 8 [0/208] loss=1.0975 grad_norm=12.783 logit_scale=14.684 batch_ms=151 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 09:59:52 [INFO] Epoch 8 [50/208] loss=0.7988 grad_norm=12.841 logit_scale=14.719 batch_ms=107 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 09:59:59 [INFO] Epoch 8 [100/208] loss=1.1403 grad_norm=14.818 logit_scale=14.755 batch_ms=98 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:07 [INFO] Epoch 8 [150/208] loss=0.8243 grad_norm=11.775 logit_scale=14.781 batch_ms=115 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:16 [INFO] Epoch 8 [200/208] loss=1.1662 grad_norm=14.467 logit_scale=14.813 batch_ms=112 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:17 [INFO] === Epoch 8 DONE — avg_train_loss=0.9348 epoch_time=33.8s ===
+2026-02-24 10:00:17 [INFO] Validation — 24 batches
+2026-02-24 10:00:21 [INFO] Validation done — avg_val_loss=3.3361 time=3.7s
+2026-02-24 10:00:21 [INFO] Epoch 8 summary | train_loss=0.9348 val_loss=3.3361 best_val=2.8827
+2026-02-24 10:00:24 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=8 val_loss=3.3361)
+2026-02-24 10:00:24 [INFO] === Epoch 9/9 START — batches=208 gpu_mem=2.18/8.72 GB (alloc/reserved) ===
+2026-02-24 10:00:25 [INFO] Epoch 9 [0/208] loss=0.9016 grad_norm=12.605 logit_scale=14.818 batch_ms=167 gpu_mem=2.23/8.72 GB (alloc/reserved)
+2026-02-24 10:00:33 [INFO] Epoch 9 [50/208] loss=0.9263 grad_norm=15.569 logit_scale=14.858 batch_ms=119 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:41 [INFO] Epoch 9 [100/208] loss=0.8730 grad_norm=12.450 logit_scale=14.891 batch_ms=107 gpu_mem=2.21/8.72 GB (alloc/reserved)
+2026-02-24 10:00:49 [INFO] Epoch 9 [150/208] loss=0.6295 grad_norm=9.737 logit_scale=14.926 batch_ms=103 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:56 [INFO] Epoch 9 [200/208] loss=0.9605 grad_norm=12.434 logit_scale=14.953 batch_ms=107 gpu_mem=2.22/8.72 GB (alloc/reserved)
+2026-02-24 10:00:58 [INFO] === Epoch 9 DONE — avg_train_loss=0.8268 epoch_time=33.5s ===
+2026-02-24 10:00:58 [INFO] Validation — 24 batches
+2026-02-24 10:01:01 [INFO] Validation done — avg_val_loss=3.4968 time=3.7s
+2026-02-24 10:01:01 [INFO] Epoch 9 summary | train_loss=0.8268 val_loss=3.4968 best_val=2.8827
+2026-02-24 10:01:05 [INFO] Checkpoint saved → experiments/results/checkpoints/chexzero/latest.pt  (epoch=9 val_loss=3.4968)
+2026-02-24 10:01:05 [INFO] Training complete — best_val_loss=2.8827 checkpoint_dir=experiments/results/checkpoints/chexzero/
