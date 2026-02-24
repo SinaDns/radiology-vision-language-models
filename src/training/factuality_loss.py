@@ -176,10 +176,12 @@ def compute_radgraph_f1(
         logger.info("RadGraph F1 (level=%s): %.4f", reward_level, mean_f1)
         return {"radgraph_f1": float(mean_f1)}
 
-    except ImportError:
+    except Exception as exc:
         logger.warning(
-            "radgraph package not installed — falling back to proxy token-overlap F1. "
-            "Install with: pip install radgraph  (requires PhysioNet access)"
+            "RadGraph F1 unavailable (%s: %s) — falling back to proxy token-overlap F1. "
+            "Common cause: transformers>=4.46 removed encode_plus, which the bundled "
+            "allennlp inside radgraph still calls.",
+            type(exc).__name__, exc,
         )
         return _proxy_radgraph_f1(hypotheses, references)
 
