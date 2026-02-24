@@ -309,11 +309,11 @@ def _load_chexbert_labeler(device: str = "cpu"):
         if missing:
             logger.warning("CheXbert: %d missing keys (first 5: %s)", len(missing), missing[:5])
     except Exception as exc:
-        logger.warning(
-            "CheXbert pretrained weights could not be loaded (%s). "
-            "Classification heads are randomly initialised — metric values "
-            "will be meaningless.", exc,
-        )
+        raise RuntimeError(
+            f"CheXbert pretrained weights could not be loaded: {exc}\n"
+            "stanfordmlgroup/CheXbert on HuggingFace is a gated model that requires "
+            "authentication. Authenticate with: huggingface-cli login"
+        ) from exc
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     labeler.to(device).eval()
@@ -354,12 +354,8 @@ def compute_chexbert_metrics(
     try:
         labeler, tokenizer = _load_chexbert_labeler(device)
     except Exception as exc:
-        logger.error("CheXbert could not be initialised: %s — returning zeros.", exc)
-        return {
-            "chexbert_macro_f1":        0.0,
-            "chexbert_macro_precision": 0.0,
-            "chexbert_macro_recall":    0.0,
-        }
+        logger.warning("CheXbert unavailable — skipping metric. (%s)", exc)
+        return {"chexbert_unavailable": True}
 
     def _label_texts(texts: list[str]) -> np.ndarray:
         """Return (N, 14) binary array: 1 = positive prediction, 0 otherwise."""
@@ -473,6 +469,13 @@ def generation_report(metrics: dict[str, float]) -> str:
 
 def chexbert_report(metrics: dict[str, float]) -> str:
     """Return a formatted string table of CheXbert label-level metrics."""
+    if metrics.get("chexbert_unavailable"):
+        return (
+            "CheXbert metrics skipped — pretrained weights could not be loaded.\n"
+            "stanfordmlgroup/CheXbert is a gated HuggingFace model.\n"
+            "Authenticate once with:  huggingface-cli login\n"
+            "then re-run this cell."
+        )
     lines = [
         f"{'Condition':<30} {'F1':>8}",
         "-" * 40,
