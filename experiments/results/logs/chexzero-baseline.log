@@ -1,0 +1,12 @@
+2026-02-24 09:25:23 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:25:23 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:25:29 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:25:34 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:25:34 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:29:41 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:29:41 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=0.54/0.59 GB (alloc/reserved) ===
+2026-02-24 09:35:23 [INFO] ContrastiveTrainer — device=cuda epochs=10 lr=5e-05 bs=32 mixed_precision=True grad_clip=1.0
+2026-02-24 09:35:23 [INFO] Loading tokenizer emilyalsentzer/Bio_ClinicalBERT …
+2026-02-24 09:35:48 [INFO] Tokenizer loaded — vocab_size=28996 max_text_length=256
+2026-02-24 09:35:51 [INFO] Training starts — start_epoch=0 target_epochs=10
+2026-02-24 09:35:51 [INFO] === Epoch 0/9 START — batches=208 gpu_mem=1.08/1.14 GB (alloc/reserved) ===

@@ -172,10 +172,11 @@ class IUXrayDataset(Dataset):
         return samples
 
     def _parse_image_uris(self, xml_path: Path) -> list[str]:
-        """Return the list of image filenames declared in a study XML.
+        """Return image filenames declared in a study XML.
 
-        Reads ``<parentImage URI="...">`` elements.  Returns an empty
-        list on parse error.
+        OpenI IU X-Ray XMLs use ``<parentImage id="CXR<n>_IM-XXXX-XXXX">``
+        with NO file extension and NO URI attribute.  We append ``.png`` to
+        match the extracted filenames in the image index.
         """
         try:
             root = ET.parse(xml_path).getroot()
@@ -185,10 +186,11 @@ class IUXrayDataset(Dataset):
 
         uris = []
         for img in root.iter("parentImage"):
-            uri = img.get("URI", "").strip()
-            if uri:
-                uris.append(uri)
-
+            val = img.get("id", "").strip()          # real format: id="CXR3921_IM-1995-1001"
+            if not val:
+                val = img.get("URI", "").strip()     # fallback for any edge cases
+            if val:
+                uris.append(Path(val).stem + ".png") # stem handles any stray extension
         return uris
 
     def _parse_report(self, xml_path: Path) -> str:

@@ -170,6 +170,8 @@ LaTeX build artifacts are gitignored for `proposal/` only.
 - **IU X-Ray image pairing**: images are resolved via exact filenames from XML `<parentImage URI>` elements (not glob matching) to avoid wrong-image pairings.
 - **SCST visual encoder frozen**: only decoder + memory parameters updated during RL fine-tuning to prevent feature collapse.
 - Compute budget: ~100–150 GPU hours total; single T4 (Colab) sufficient for demo runs.
+- **IU X-Ray image pairing**: images are resolved via exact filenames from XML `<parentImage id="...">` elements (the `id` attribute holds the stem e.g. `CXR3921_IM-1995-1001`; `.png` is appended to match disk filenames). Not glob matching, not `URI` attribute.
+- **Image transforms**: always use `T.Resize((image_size, image_size))` with a tuple — a single int scales only the shortest edge and produces variable-height tensors that crash `DataLoader` collation.
 
 ## Literature Reference
 
