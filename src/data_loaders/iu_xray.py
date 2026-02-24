@@ -174,8 +174,14 @@ class IUXrayDataset(Dataset):
     def _parse_image_uris(self, xml_path: Path) -> list[str]:
         """Return the list of image filenames declared in a study XML.
 
-        Reads ``<parentImage URI="...">`` elements.  Returns an empty
-        list on parse error.
+        Handles two ``<parentImage>`` formats found in the IU X-Ray release:
+
+        * ``<parentImage URI="CXR1_IM-0001-1001.png">``  (URI attribute)
+        * ``<parentImage id="CXR1_IM-0001-1001">``       (id attribute, no .png)
+
+        In both cases only the bare filename (no path prefix) is returned so
+        it can be looked up in the flat image index built from ``images/``.
+        Returns an empty list on parse error.
         """
         try:
             root = ET.parse(xml_path).getroot()
@@ -183,13 +189,22 @@ class IUXrayDataset(Dataset):
             logger.warning("XML parse error in %s: %s", xml_path.name, exc)
             return []
 
-        uris = []
+        filenames = []
         for img in root.iter("parentImage"):
+            # Format 1: explicit URI attribute (may be a full URL or bare filename)
             uri = img.get("URI", "").strip()
             if uri:
-                uris.append(uri)
+                name = Path(uri.replace("\\", "/")).name
+                if name:
+                    filenames.append(name)
+                continue
 
-        return uris
+            # Format 2: id attribute holds the filename without the .png extension
+            img_id = img.get("id", "").strip()
+            if img_id:
+                filenames.append(img_id + ".png")
+
+        return filenames
 
     def _parse_report(self, xml_path: Path) -> str:
         """Concatenate FINDINGS and IMPRESSION sections from a study XML."""
