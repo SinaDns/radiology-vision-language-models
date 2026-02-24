@@ -11,3 +11,4 @@ proposal/main.xdb
 .venv/*
 data/iu_xray/*
 *.pyc
+experiments/results/checkpoints/*
