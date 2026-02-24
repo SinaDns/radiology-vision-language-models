@@ -166,10 +166,13 @@ def compute_radgraph_f1(
         Dict with ``radgraph_f1`` (mean over all samples).
     """
     try:
+        from src.utils.radgraph_compat import patch_transformers_for_radgraph
+        patch_transformers_for_radgraph()
+
         from radgraph import F1RadGraph
         scorer = F1RadGraph(reward_level=reward_level)
 
-        mean_f1, _, _ = scorer(
+        mean_f1, *_ = scorer(
             refs=references,
             hyps=hypotheses,
         )

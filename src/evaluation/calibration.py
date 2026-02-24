@@ -144,6 +144,9 @@ def calibration_analysis(
     # Try RadGraph F1 first
     for rg_model in ["radgraph-xl", "radgraph"]:
         try:
+            from src.utils.radgraph_compat import patch_transformers_for_radgraph
+            patch_transformers_for_radgraph()
+
             from radgraph import F1RadGraph
             f1fn = F1RadGraph(reward_level="all", model_type=rg_model)
             hyps_clean = [h if h.strip() else "no findings." for h in hypotheses]

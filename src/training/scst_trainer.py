@@ -164,6 +164,9 @@ class SCSTTrainer:
         self.f1radgraph = None
         for attempt in [rg_model, "radgraph"]:
             try:
+                from src.utils.radgraph_compat import patch_transformers_for_radgraph
+                patch_transformers_for_radgraph()
+
                 from radgraph import F1RadGraph
                 self.f1radgraph = F1RadGraph(reward_level="all", model_type=attempt)
                 self.log.info("RadGraph loaded (%s) — using RG_ER as SCST reward", attempt)

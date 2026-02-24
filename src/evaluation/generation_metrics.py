@@ -250,12 +250,12 @@ CHEXBERT_LABELS: list[str] = [
 def _load_chexbert_labeler(device: str = "cpu"):
     """Build the CheXbert labeler and load pretrained weights.
 
-    Architecture matches ``stanfordmlgroup/CheXbert`` exactly:
+    Architecture:
       - backbone: ``bert-base-uncased``
       - 14 independent 4-class linear heads (blank/positive/negative/uncertain)
 
-    The pretrained checkpoint is downloaded from the HuggingFace Hub on first
-    call (~440 MB) and cached automatically by ``huggingface_hub``.
+    Weights are downloaded from ``StanfordAIMI/RRG_scorers`` on first call
+    (~440 MB) and cached automatically by ``huggingface_hub``.
 
     Args:
         device: Torch device string.
@@ -268,15 +268,20 @@ def _load_chexbert_labeler(device: str = "cpu"):
     from transformers import BertModel, BertTokenizer
 
     class _CheXbertLabeler(nn.Module):
-        """BERT + 14 independent 4-class classification heads."""
+        """BERT + 14 classification heads matching the original CheXbert architecture.
+
+        Heads 0–12: 4-class (blank / positive / negative / uncertain).
+        Head 13 ("Support Devices"): 2-class (binary) — matches the saved checkpoint.
+        """
 
         def __init__(self) -> None:
             super().__init__()
             self.bert = BertModel.from_pretrained("bert-base-uncased")
             self.dropout = nn.Dropout(p=0.1)
-            # 14 heads; 4 classes each: blank(0), positive(1), negative(2), uncertain(3)
+            # 13 four-class heads + 1 binary head (Support Devices)
             self.linear_heads = nn.ModuleList(
-                [nn.Linear(768, 4) for _ in range(len(CHEXBERT_LABELS))]
+                [nn.Linear(768, 4) for _ in range(13)]
+                + [nn.Linear(768, 2)]
             )
 
         def forward(self, input_ids, attention_mask):
@@ -289,12 +294,42 @@ def _load_chexbert_labeler(device: str = "cpu"):
     try:
         from huggingface_hub import hf_hub_download
         ckpt_path = hf_hub_download(
-            repo_id="stanfordmlgroup/CheXbert",
-            filename="pytorch_model.bin",
+            repo_id="StanfordAIMI/RRG_scorers",
+            filename="chexbert.pth",
         )
-        state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        # strict=False: the saved checkpoint also contains linear_heads_uncertain.*
-        # keys (from the original training code) which we intentionally skip.
+        raw = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+
+        # Log top-level keys so naming mismatches are immediately visible.
+        top_keys = list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__
+        logger.info("chexbert.pth top-level keys: %s", top_keys)
+
+        # Unwrap training-checkpoint wrappers (e.g. {"model_state_dict": {...}}).
+        state_dict = raw
+        for _wrapper in ("model_state_dict", "state_dict", "model"):
+            if (isinstance(state_dict, dict)
+                    and _wrapper in state_dict
+                    and isinstance(state_dict[_wrapper], dict)):
+                state_dict = state_dict[_wrapper]
+                logger.info("Unwrapped checkpoint: used key '%s'", _wrapper)
+                break
+
+        # Strip DataParallel "module." prefix if present.
+        if isinstance(state_dict, dict) and all(k.startswith("module.") for k in state_dict):
+            state_dict = {k[len("module."):]: v for k, v in state_dict.items()}
+            logger.info("Stripped DataParallel 'module.' prefix.")
+
+        # Original Stanford CheXbert code names the BERT backbone "bert_encoder"
+        # rather than "bert".  Remap so keys match our _CheXbertLabeler.
+        if any(k.startswith("bert_encoder.") for k in state_dict):
+            state_dict = {
+                (k.replace("bert_encoder.", "bert.", 1)
+                 if k.startswith("bert_encoder.") else k): v
+                for k, v in state_dict.items()
+            }
+            logger.info("Remapped checkpoint keys: bert_encoder.* → bert.*")
+
+        # strict=False: the saved checkpoint may also contain
+        # linear_heads_uncertain.* keys which we intentionally skip.
         missing, unexpected = labeler.load_state_dict(state_dict, strict=False)
         loaded_heads = sum(
             1 for k in state_dict if k.startswith("linear_heads.")
@@ -302,18 +337,17 @@ def _load_chexbert_labeler(device: str = "cpu"):
         )
         logger.info(
             "CheXbert loaded — %d/14 head weight tensors present, "
-            "%d unexpected keys ignored.",
+            "%d missing keys, %d unexpected keys ignored.",
             loaded_heads // 2,   # weight + bias per head → divide by 2
+            len(missing),
             len(unexpected),
         )
         if missing:
             logger.warning("CheXbert: %d missing keys (first 5: %s)", len(missing), missing[:5])
     except Exception as exc:
-        logger.warning(
-            "CheXbert pretrained weights could not be loaded (%s). "
-            "Classification heads are randomly initialised — metric values "
-            "will be meaningless.", exc,
-        )
+        raise RuntimeError(
+            f"CheXbert pretrained weights could not be loaded: {exc}"
+        ) from exc
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     labeler.to(device).eval()
@@ -354,12 +388,8 @@ def compute_chexbert_metrics(
     try:
         labeler, tokenizer = _load_chexbert_labeler(device)
     except Exception as exc:
-        logger.error("CheXbert could not be initialised: %s — returning zeros.", exc)
-        return {
-            "chexbert_macro_f1":        0.0,
-            "chexbert_macro_precision": 0.0,
-            "chexbert_macro_recall":    0.0,
-        }
+        logger.warning("CheXbert unavailable — skipping metric. (%s)", exc)
+        return {"chexbert_unavailable": True}
 
     def _label_texts(texts: list[str]) -> np.ndarray:
         """Return (N, 14) binary array: 1 = positive prediction, 0 otherwise."""
@@ -473,6 +503,8 @@ def generation_report(metrics: dict[str, float]) -> str:
 
 def chexbert_report(metrics: dict[str, float]) -> str:
     """Return a formatted string table of CheXbert label-level metrics."""
+    if metrics.get("chexbert_unavailable"):
+        return "CheXbert metrics skipped — pretrained weights could not be loaded."
     lines = [
         f"{'Condition':<30} {'F1':>8}",
         "-" * 40,
