@@ -118,7 +118,8 @@ class ProxyFactualityLoss(nn.Module):
         ce_loss = F.cross_entropy(logits_flat, targets_flat, ignore_index=self.pad_id)
 
         # Factuality loss: CE restricted to clinical keyword positions
-        clinical_pos = self.clinical_mask[targets_flat]         # (B*T,) bool
+        # Move clinical_mask to same device as targets (CPU or CUDA)
+        clinical_pos = self.clinical_mask.to(targets_flat.device)[targets_flat]   # (B*T,) bool
         non_pad_pos  = targets_flat != self.pad_id
 
         active = clinical_pos & non_pad_pos

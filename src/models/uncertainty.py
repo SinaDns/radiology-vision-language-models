@@ -427,30 +427,36 @@ class ConformalPredictor:
         scores_before: np.ndarray,
         scores_after: np.ndarray,
         labels: np.ndarray,
+        labels_before: Optional[np.ndarray] = None,
     ) -> dict[str, float]:
         """Compare ECE before/after conformal calibration.
 
         Args:
-            scores_before: ``(N, C)`` raw model scores.
-            scores_after:  ``(N, C)`` calibrated (threshold-shifted) scores.
-            labels:        ``(N, C)`` binary ground-truth.
-
-        Returns:
-            Dict with ``ece_before``, ``ece_after``, ``ece_reduction``.
+            scores_before:  ``(N_calib, C)`` raw model scores on calibration set.
+            scores_after:   ``(N_test,  C)`` calibrated scores on test set.
+            labels:         ``(N_test,  C)`` binary ground-truth for test set.
+            labels_before:  ``(N_calib, C)`` binary ground-truth for calibration set.
+                            If None, ``labels`` is reused (only valid when
+                            N_calib == N_test).
         """
         from src.evaluation.metrics import compute_ece
-        import torch.nn.functional as F
-        import torch
 
-        def mean_ece(s, y):
-            # Convert scores to probabilities via sigmoid
+        if labels_before is None:
+            if scores_before.shape[0] != labels.shape[0]:
+                raise ValueError(
+                    f"scores_before has {scores_before.shape[0]} rows but labels has "
+                    f"{labels.shape[0]} rows. Pass labels_before for the calibration set."
+                )
+            labels_before = labels
+
+        def mean_ece(s: np.ndarray, y: np.ndarray) -> float:
             probs = torch.sigmoid(torch.tensor(s)).numpy()
             eces = []
             for c in range(s.shape[1]):
                 eces.append(compute_ece(probs[:, c], y[:, c]))
             return float(np.mean(eces))
 
-        ece_before = mean_ece(scores_before, labels)
+        ece_before = mean_ece(scores_before, labels_before)
         ece_after  = mean_ece(scores_after,  labels)
         reduction  = (ece_before - ece_after) / max(ece_before, 1e-8)
 
@@ -459,7 +465,8 @@ class ConformalPredictor:
             ece_before, ece_after, reduction * 100,
         )
         return {
-            "ece_before": ece_before,
-            "ece_after":  ece_after,
+            "ece_before":    ece_before,
+            "ece_after":     ece_after,
             "ece_reduction": reduction,
         }
+
