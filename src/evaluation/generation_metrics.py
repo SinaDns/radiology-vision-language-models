@@ -268,15 +268,20 @@ def _load_chexbert_labeler(device: str = "cpu"):
     from transformers import BertModel, BertTokenizer
 
     class _CheXbertLabeler(nn.Module):
-        """BERT + 14 independent 4-class classification heads."""
+        """BERT + 14 classification heads matching the original CheXbert architecture.
+
+        Heads 0–12: 4-class (blank / positive / negative / uncertain).
+        Head 13 ("Support Devices"): 2-class (binary) — matches the saved checkpoint.
+        """
 
         def __init__(self) -> None:
             super().__init__()
             self.bert = BertModel.from_pretrained("bert-base-uncased")
             self.dropout = nn.Dropout(p=0.1)
-            # 14 heads; 4 classes each: blank(0), positive(1), negative(2), uncertain(3)
+            # 13 four-class heads + 1 binary head (Support Devices)
             self.linear_heads = nn.ModuleList(
-                [nn.Linear(768, 4) for _ in range(len(CHEXBERT_LABELS))]
+                [nn.Linear(768, 4) for _ in range(13)]
+                + [nn.Linear(768, 2)]
             )
 
         def forward(self, input_ids, attention_mask):
