@@ -1,0 +1,25 @@
+\begin{thebibliography}{1}
+
+\bibitem{chen2020r2gen}
+Zhihong Chen et~al.
+\newblock Generating radiology reports via memory-driven transformer.
+\newblock In {\em EMNLP}, 2020.
+
+\bibitem{gal2016dropout}
+Yarin Gal and Zoubin Ghahramani.
+\newblock Dropout as a bayesian approximation.
+\newblock In {\em ICML}, 2016.
+
+\bibitem{jain2023radgraph}
+Saahil Jain et~al.
+\newblock Automated radiology report summarization using an open-source natural
+  language processing pipeline.
+\newblock {\em NEJM AI}, 2023.
+
+\bibitem{tiu2022chexzero}
+Ekin Tiu et~al.
+\newblock Expert-level detection of pathologies from unannotated chest x-ray
+  images via self-supervised learning.
+\newblock {\em Nature Biomedical Engineering}, 2022.
+
+\end{thebibliography}
