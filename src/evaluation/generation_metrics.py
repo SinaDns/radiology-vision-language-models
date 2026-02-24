@@ -250,12 +250,12 @@ CHEXBERT_LABELS: list[str] = [
 def _load_chexbert_labeler(device: str = "cpu"):
     """Build the CheXbert labeler and load pretrained weights.
 
-    Architecture matches ``stanfordmlgroup/CheXbert`` exactly:
+    Architecture:
       - backbone: ``bert-base-uncased``
       - 14 independent 4-class linear heads (blank/positive/negative/uncertain)
 
-    The pretrained checkpoint is downloaded from the HuggingFace Hub on first
-    call (~440 MB) and cached automatically by ``huggingface_hub``.
+    Weights are downloaded from ``StanfordAIMI/RRG_scorers`` on first call
+    (~440 MB) and cached automatically by ``huggingface_hub``.
 
     Args:
         device: Torch device string.
@@ -289,12 +289,18 @@ def _load_chexbert_labeler(device: str = "cpu"):
     try:
         from huggingface_hub import hf_hub_download
         ckpt_path = hf_hub_download(
-            repo_id="stanfordmlgroup/CheXbert",
-            filename="pytorch_model.bin",
+            repo_id="StanfordAIMI/RRG_scorers",
+            filename="chexbert.pth",
         )
         state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        # strict=False: the saved checkpoint also contains linear_heads_uncertain.*
-        # keys (from the original training code) which we intentionally skip.
+
+        # Some checkpoints are saved with nn.DataParallel, which adds a "module."
+        # prefix to every key.  Strip it so the keys match our plain module.
+        if all(k.startswith("module.") for k in state_dict):
+            state_dict = {k[len("module."):]: v for k, v in state_dict.items()}
+
+        # strict=False: the saved checkpoint may also contain
+        # linear_heads_uncertain.* keys which we intentionally skip.
         missing, unexpected = labeler.load_state_dict(state_dict, strict=False)
         loaded_heads = sum(
             1 for k in state_dict if k.startswith("linear_heads.")
@@ -310,9 +316,7 @@ def _load_chexbert_labeler(device: str = "cpu"):
             logger.warning("CheXbert: %d missing keys (first 5: %s)", len(missing), missing[:5])
     except Exception as exc:
         raise RuntimeError(
-            f"CheXbert pretrained weights could not be loaded: {exc}\n"
-            "stanfordmlgroup/CheXbert on HuggingFace is a gated model that requires "
-            "authentication. Authenticate with: huggingface-cli login"
+            f"CheXbert pretrained weights could not be loaded: {exc}"
         ) from exc
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -470,12 +474,7 @@ def generation_report(metrics: dict[str, float]) -> str:
 def chexbert_report(metrics: dict[str, float]) -> str:
     """Return a formatted string table of CheXbert label-level metrics."""
     if metrics.get("chexbert_unavailable"):
-        return (
-            "CheXbert metrics skipped — pretrained weights could not be loaded.\n"
-            "stanfordmlgroup/CheXbert is a gated HuggingFace model.\n"
-            "Authenticate once with:  huggingface-cli login\n"
-            "then re-run this cell."
-        )
+        return "CheXbert metrics skipped — pretrained weights could not be loaded."
     lines = [
         f"{'Condition':<30} {'F1':>8}",
         "-" * 40,
