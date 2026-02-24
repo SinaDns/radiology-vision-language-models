@@ -9,6 +9,6 @@ proposal/main.fls
 proposal/main.synctex.gz
 proposal/main.xdb
 .venv/*
-data/iu_xray/*
+data/*
 *.pyc
 experiments/results/checkpoints/*
