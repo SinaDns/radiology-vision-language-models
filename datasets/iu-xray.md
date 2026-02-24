@@ -150,6 +150,13 @@ Some papers use different splits:
 
 **Recommendation:** Use **70/15/15 split** for comparability with prior work.
 
+### This Project's Split
+
+We use a **90/10 train/val split** (no held-out test set) because:
+- IU X-Ray has no standard test-set lock-out; test performance is reported on NIH-14 (zero-shot)
+- 90/10 maximises training data for the small dataset
+- Implemented in `src/data_loaders/iu_xray.py` and `src/data_loaders/iu_xray_seq2seq.py`
+
 ---
 
 ## Download Instructions
@@ -211,25 +218,7 @@ https://www.kaggle.com/datasets/raddar/chest-xrays-indiana-university
    - For GLORIA-style models: split into sentences
    - For generation: keep as full text
 
-**Python Code Example:**
-```python
-import xml.etree.ElementTree as ET
-
-def parse_iu_xray(xml_path):
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-    
-    reports = {}
-    for report in root.findall('.//report'):
-        study_id = report.get('id')
-        findings = report.findtext('.//section[@name="FINDINGS"]')
-        impression = report.findtext('.//section[@name="IMPRESSION"]')
-        reports[study_id] = {
-            'findings': findings or '',
-            'impression': impression or ''
-        }
-    return reports
-```
+**Implementation note:** Our loader (`src/data_loaders/iu_xray.py`) extracts image filenames from the `<parentImage URI="...">` element in each XML rather than using glob matching. This avoids pairing an image with the wrong study when multiple studies share a similar naming prefix. FINDINGS and IMPRESSION sections are concatenated as the report text.
 
 ---
 
@@ -312,35 +301,21 @@ def parse_iu_xray(xml_path):
 
 ---
 
-## Recommended Usage for Our Project
+## Usage in This Project
 
-### Scenario 1: Pure Public Data
+### What We Actually Use IU X-Ray For
 
-**Training:**
-- IU X-Ray (3,955 studies)
+| Task | Split | Loader |
+|------|-------|--------|
+| CheXzero contrastive training | 90% train | `IUXrayDataset` |
+| CheXzero val loss monitoring | 10% val | `IUXrayDataset` |
+| IU X-Ray image→text retrieval (val eval) | 10% val | `IUXrayDataset` |
+| R2Gen training | 90% train | `IUXraySeq2SeqDataset` |
+| R2Gen / SCST / Factuality val loss | 10% val | `IUXraySeq2SeqDataset` |
+| Report generation evaluation (BLEU/ROUGE/METEOR/RadGraph F1) | 10% val | `IUXraySeq2SeqDataset` |
+| Calibration analysis (MC Dropout reference) | 10% val | `IUXraySeq2SeqDataset` |
 
-**Testing:**
-- IU X-Ray test split
-- NIH-14 (zero-shot classification only)
-
-**Limitation:** Small scale limits performance ceiling
-
-### Scenario 2: Transfer Learning
-
-**Pretraining:**
-- IU X-Ray (report generation pretraining)
-- NIH-14 (can create pseudo-reports from labels)
-
-**Fine-Tuning:**
-- IU X-Ray (full supervision)
-
-### Scenario 3: Cross-Dataset Validation
-
-**Train on IU X-Ray, test on:**
-- NIH-14 (classification only)
-- PadChest (if willing to handle Spanish reports)
-
-**Goal:** Demonstrate robustness
+NIH-14 is used exclusively for zero-shot classification evaluation and cross-dataset robustness (no IU X-Ray test split needed for that).
 
 ---
 
@@ -380,6 +355,6 @@ Association, 2016.
 
 ---
 
-**Last Updated:** January 2026  
-**Status:** ✅ Fully accessible and ready for use  
-**Recommendation:** **Primary dataset for report generation track** in our project
+**Last Updated:** February 2026
+**Status:** ✅ Integrated — data loaders implemented in `src/data_loaders/iu_xray.py` and `src/data_loaders/iu_xray_seq2seq.py`
+**Role in project:** Primary training dataset for both CheXzero and R2Gen

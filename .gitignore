@@ -8,3 +8,7 @@ proposal/main.fdb_latexmk
 proposal/main.fls
 proposal/main.synctex.gz
 proposal/main.xdb
+.venv/*
+data/*
+*.pyc
+experiments/results/checkpoints/*

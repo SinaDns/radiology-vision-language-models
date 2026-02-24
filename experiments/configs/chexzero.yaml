@@ -1,0 +1,27 @@
+model:
+  embed_dim: 512
+  temperature: 0.07
+
+training:
+  batch_size: 128
+  lr: 5.0e-5
+  weight_decay: 1.0e-4
+  epochs: 20
+  grad_clip: 1.0
+  mixed_precision: true
+
+data:
+  image_size: 320
+  num_workers: 4
+  val_split: 0.1
+
+paths:
+  iu_xray_dir: data/iu_xray/
+  nih14_dir: data/nih_chestxray14/
+  checkpoint_dir: experiments/results/checkpoints/chexzero/
+  log_dir: experiments/results/logs/
+
+logging:
+  use_wandb: false
+  project: radiology-vlm
+  run_name: chexzero-baseline

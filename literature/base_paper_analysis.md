@@ -190,79 +190,73 @@ After comprehensive review of medical vision-language models, we recommend **Che
 
 ## Final Recommendation: Hybrid Approach
 
-### Phase 1: Baseline Implementation (Months 1-2)
+### Phase 1: Baseline Implementation (Months 1-2) ✅
 
-**Primary:** CheXzero on IU X-Ray
-- Reproduce zero-shot classification results
-- Extend to image-text retrieval evaluation
-- Test cross-dataset on NIH-14
+**CheXzero on IU X-Ray** — implemented in `src/models/chexzero.py` + `src/training/contrastive.py`
+- Zero-shot classification via PATHOLOGY_PROMPTS (14 NIH-14 diseases)
+- Image-text retrieval evaluation on IU X-Ray val set
+- Cross-dataset zero-shot AUROC on NIH-14
 
-**Secondary:** R2Gen on IU X-Ray
-- Reproduce report generation results
-- Add RadGraph F1 evaluation
-- Baseline for generation experiments
+**R2Gen on IU X-Ray** — implemented in `src/models/r2gen.py` + `src/training/r2gen_trainer.py`
+- Report generation with BLEU/ROUGE/METEOR/CIDEr evaluation (`src/evaluation/generation_metrics.py`)
+- RadGraph F1 evaluation (proxy via `compute_radgraph_f1`)
+- CheXbert label-level F1 evaluation (`compute_chexbert_metrics` — loads `stanfordmlgroup/CheXbert`)
 
-### Phase 2: Novel Contribution (Months 3-5)
+### Phase 2: Novel Contributions (Months 3-5) ✅ (all three implemented)
 
-**Option A (Classification Focus):**
-1. **Uncertainty-Aware CheXzero**
-   - MC Dropout + conformal prediction
-   - Calibration evaluation
-   - Test on rare diseases
+**Extension 1 — Uncertainty-Aware CheXzero** (`src/models/uncertainty.py`)
+- MC Dropout (n_samples=10) over CheXzero image embeddings
+- Conformal prediction calibration (α=0.10)
+- Per-class epistemic uncertainty + coverage guarantee
 
-**Option B (Generation Focus):**
-2. **Factuality-Aware Report Generation**
-   - CheXzero encoder + R2Gen decoder
-   - RadGraph-based training loss
-   - Attention grounding evaluation
+**Extension 2 — Factuality-Aware Report Generation**
+- Proxy factuality loss: `src/training/factuality_loss.py`
+- SCST fine-tuning with RadGraph F1 reward: `src/training/scst_trainer.py`
+- Combined CE + λ·RL loss; visual encoder frozen during SCST
 
-**Option C (Robustness Focus):**
-3. **Cross-Dataset Robustness**
-   - Train on IU X-Ray
-   - Test on NIH-14, PadChest
-   - Domain adaptation techniques
+**Extension 3 — Cross-Dataset Robustness** (`src/evaluation/cross_dataset.py`)
+- Domain gap quantification (cosine similarity between IU X-Ray and NIH-14 embeddings)
+- Few-shot linear probe adaptation (k=1,5,10,25 labelled examples per class)
 
-**Recommended:** **Option B** — Best novelty + publication potential
+### Phase 3: Evaluation & Publication (Months 6-8) ⏳
 
-### Phase 3: Publication Preparation (Months 6-8)
-
-- Comprehensive experiments (ablations, comparisons)
-- Clinical evaluation metrics (RadGraph, CheXbert)
-- Error analysis and case studies
-- Write paper for MICCAI or MIDL
+- Run full experiments, collect metrics
+- Ablation studies for each extension
+- Write paper for MICCAI workshop (May 2026) or MIDL
 
 ---
 
 ## Implementation Roadmap
 
-### Week 1-2: Setup & Reproduction
-- [ ] Set up environment (PyTorch, Transformers, medical imaging libs)
-- [ ] Download IU X-Ray (7 GB) and NIH-14 (45 GB)
-- [ ] Reproduce CheXzero baseline (AUROC validation)
-- [ ] Reproduce R2Gen baseline (BLEU validation)
+### Week 1-2: Setup & Reproduction ✅
+- [x] Set up environment (`requirements.txt`, all deps pinned)
+- [x] IU X-Ray loader (`src/data_loaders/iu_xray.py`, `iu_xray_seq2seq.py`)
+- [x] NIH-14 loader (`src/data_loaders/nih_chestxray14.py`)
+- [x] CheXzero baseline (`src/models/chexzero.py`, `src/training/contrastive.py`)
+- [x] R2Gen baseline (`src/models/r2gen.py`, `src/training/r2gen_trainer.py`)
 
-### Week 3-4: Baseline Extension
-- [ ] Add RadGraph F1 evaluation to R2Gen
-- [ ] Add retrieval evaluation to CheXzero
-- [ ] Test cross-dataset (IU X-Ray → NIH-14)
-- [ ] Document baseline performance
+### Week 3-4: Baseline Extension ✅
+- [x] RadGraph F1 evaluation (`src/training/factuality_loss.py::compute_radgraph_f1`)
+- [x] IU X-Ray image→text retrieval evaluation (`chexzero_colab.ipynb` Section 4.5)
+- [x] Zero-shot cross-dataset eval (`src/evaluation/zero_shot.py`)
+- [x] Generation metrics (`src/evaluation/generation_metrics.py`)
 
-### Week 5-8: Novel Contribution
-- [ ] Implement chosen extension (Option A, B, or C)
-- [ ] Iterative development and debugging
-- [ ] Ablation studies
+### Week 5-8: Novel Contributions ✅ (all three options implemented)
+- [x] Extension 1: MC Dropout + conformal prediction (`src/models/uncertainty.py`)
+- [x] Extension 2: Proxy factuality loss + SCST (`src/training/scst_trainer.py`)
+- [x] Extension 3: Domain gap + few-shot linear probe (`src/evaluation/cross_dataset.py`)
 
-### Week 9-12: Evaluation & Analysis
-- [ ] Comprehensive evaluation on all datasets
-- [ ] Statistical significance testing
+### Week 9-12: Evaluation & Analysis ⏳
+- [ ] Run full experiments on Colab, collect metrics
+- [ ] Ablation studies (λ_fact, MC samples, k-shot values)
 - [ ] Error analysis (qualitative + quantitative)
-- [ ] Attention visualizations
+- [ ] Calibration curve analysis
 
-### Week 13-16: Writing
-- [ ] Draft paper (8 pages MICCAI format)
-- [ ] Create figures and tables
-- [ ] Literature review refinement
+### Week 13-16: Writing ⏳
+- [ ] Draft paper (4-8 pages MICCAI/MIDL format)
+- [ ] Create figures and tables from experimental results
 - [ ] Internal review and revision
+- [ ] Submit to MICCAI workshop (May 2026)
 
 ---
 
@@ -302,8 +296,8 @@ After comprehensive review of medical vision-language models, we recommend **Che
 ### Track B: Factual Report Generation
 
 **Expected Results:**
-- R2Gen baseline: BLEU-4 = 0.20, RadGraph F1 = 0.42
-- Factual R2Gen: BLEU-4 = 0.19, RadGraph F1 = 0.48 (+6%)
+- R2Gen baseline: BLEU-4 = 0.20, CIDEr = 0.30, RadGraph F1 = 0.42, CheXbert macro F1 ≈ 0.30
+- Factual R2Gen: BLEU-4 = 0.19, RadGraph F1 = 0.48 (+6%), CheXbert macro F1 ≈ 0.33 (+10%)
 - Reduced hallucination: 25% fewer false entities
 
 **Paper Title:** "Factuality-Guided Radiology Report Generation with Knowledge Graph Supervision"  
@@ -389,5 +383,5 @@ After comprehensive review of medical vision-language models, we recommend **Che
 
 ---
 
-**Last Updated:** January 2026  
-**Decision:** ✅ Proceed with CheXzero + R2Gen hybrid approach
+**Last Updated:** February 2026
+**Decision:** ✅ CheXzero + R2Gen hybrid approach — **fully implemented**

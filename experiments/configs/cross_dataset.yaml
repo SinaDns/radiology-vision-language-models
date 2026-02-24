@@ -1,0 +1,24 @@
+model:
+  chexzero_checkpoint: experiments/results/checkpoints/chexzero/best.pt
+  embed_dim: 512
+
+few_shot:
+  k_shots: [1, 5, 10, 25]   # k values to evaluate
+  n_epochs: 100
+  lr: 1.0e-3
+
+data:
+  image_size: 320
+  num_workers: 4
+
+paths:
+  iu_xray_dir: data/iu_xray/
+  nih14_dir: data/nih_chestxray14/
+  nih14_test_csv: data/nih_chestxray14/test_list.txt
+  results_dir: experiments/results/cross_dataset/
+  log_dir: experiments/results/logs/
+
+logging:
+  use_wandb: false
+  project: radiology-vlm
+  run_name: cross-dataset-eval

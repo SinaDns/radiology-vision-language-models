@@ -299,44 +299,22 @@ label_vector = [1, 0, 1, 0, ..., 0]  # 14-dim binary vector
 
 ---
 
-## Recommended Usage for Our Project
+## Usage in This Project
 
-### Scenario 1: Zero-Shot Classification Evaluation
+### What We Actually Use NIH-14 For
 
-**Setup:**
-1. Pretrain VLM (CheXzero) on IU X-Ray (with reports)
-2. Test zero-shot on NIH-14 (without fine-tuning)
-3. Report AUROC on 14 diseases
+| Task | Loader | Notes |
+|------|--------|-------|
+| Zero-shot AUROC evaluation (CheXzero) | `NIHChestXray14Dataset` | Uses `test_list.txt` official split |
+| MC Dropout conformal calibration | `NIHChestXray14Dataset` | Calibration set from `train_val_list.txt` |
+| Cross-dataset domain gap analysis | `NIHChestXray14Dataset` | Embeddings extracted then compared with IU X-Ray val |
+| Few-shot linear probe (k=1,5,10,25) | `NIHChestXray14Dataset` | Logistic regression on frozen CheXzero embeddings |
+| R2Gen encoder linear probe (optional) | `NIHChestXray14Dataset` | Frozen ResNet-101 features → per-disease AUROC |
 
-**Advantage:** Demonstrates generalization to large external dataset
+**Download required:** NIH-14 cannot be downloaded automatically (no public direct wget URL). See `experiments/scripts/download_nih14.sh` and `chexzero_colab.ipynb` Section 5 for manual download instructions.
 
-### Scenario 2: Cross-Dataset Robustness
-
-**Setup:**
-1. Train classifier on IU X-Ray (3,955 studies)
-2. Test on NIH-14 (25K test images)
-3. Analyze performance drop, error patterns
-
-**Research Question:** How robust are models to distribution shift?
-
-### Scenario 3: Weakly Supervised Localization
-
-**Setup:**
-1. Train attention-based VLM
-2. Evaluate attention maps on NIH-14 bounding box subset (880 images)
-3. Compute IoU, Pointing Accuracy
-
-**Extension:** Compare global-only (CheXzero) vs. local attention (GLORIA)
-
-### Scenario 4: Pseudo-Report Generation for Pretraining
-
-**Creative Approach:**
-1. Convert 14 labels to pseudo-reports using templates:
-   - "Findings: There is evidence of atelectasis and pleural effusion."
-2. Pretrain VLM on NIH-14 + templates
-3. Evaluate on IU X-Ray generation
-
-**Caveat:** Synthetic reports lack linguistic diversity
+**Label mapping:** Our loader uses exactly the same 14 labels as PATHOLOGY_PROMPTS in `src/evaluation/zero_shot.py`:
+`Atelectasis, Cardiomegaly, Consolidation, Edema, Effusion, Emphysema, Fibrosis, Hernia, Infiltration, Mass, Nodule, Pleural_Thickening, Pneumonia, Pneumothorax`
 
 ---
 
@@ -408,6 +386,6 @@ Uncertainty Labels and Expert Comparison," AAAI 2019.
 
 ---
 
-**Last Updated:** January 2026  
-**Status:** ✅ Fully accessible and widely used  
-**Recommendation:** **Primary dataset for classification and zero-shot evaluation** in our project
+**Last Updated:** February 2026
+**Status:** ✅ Integrated — loader implemented in `src/data_loaders/nih_chestxray14.py`
+**Role in project:** Zero-shot evaluation, conformal calibration, cross-dataset robustness, and few-shot adaptation

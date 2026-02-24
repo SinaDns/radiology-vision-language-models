@@ -1,0 +1,43 @@
+model:
+  d_model: 512
+  num_heads: 8
+  num_enc_layers: 3
+  num_dec_layers: 3
+  dim_ff: 2048
+  dropout: 0.1
+  num_mem_slots: 3
+  max_seq_len: 100
+  pretrained_image: true
+
+training:
+  batch_size: 16
+  lr: 5.0e-5
+  weight_decay: 1.0e-4
+  epochs: 30
+  grad_clip: 1.0
+  mixed_precision: true
+  log_every_n_batches: 50
+
+tokenizer:
+  min_freq: 3
+  max_length: 100
+  vocab_save_path: experiments/results/r2gen_vocab.json
+
+data:
+  image_size: 224
+  num_workers: 4
+  val_split: 0.1
+
+paths:
+  iu_xray_dir: data/iu_xray/
+  checkpoint_dir: experiments/results/checkpoints/r2gen/
+  log_dir: experiments/results/logs/
+
+generation:
+  beam_size: 3
+  max_length: 100
+
+logging:
+  use_wandb: false
+  project: radiology-vlm
+  run_name: r2gen-baseline
