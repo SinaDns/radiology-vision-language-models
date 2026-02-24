@@ -172,7 +172,7 @@ def compute_radgraph_f1(
         from radgraph import F1RadGraph
         scorer = F1RadGraph(reward_level=reward_level)
 
-        mean_f1, _, _ = scorer(
+        mean_f1, *_ = scorer(
             refs=references,
             hyps=hypotheses,
         )
