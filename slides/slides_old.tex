@@ -1,0 +1,310 @@
+\documentclass[aspectratio=169]{beamer}
+
+% Theme selection
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+% Packages
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shapes, positioning, shadows, arrows.meta}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{listings}
+
+% Custom Colors (matching proposal)
+\definecolor{sharifblue}{RGB}{0, 50, 100}
+\setbeamercolor{structure}{fg=sharifblue}
+\setbeamercolor{frametitle}{bg=sharifblue, fg=white}
+
+% Title Info
+\title[Radiology VLMs]{Vision-Language Models in Radiology}
+\subtitle{Zero-Shot Classification, Cross-Modal Retrieval, and Factual Report Generation}
+\author[Salehi, Salesi, Daneshgar, Beyrami]{Shayan Salehi, Ali Salesi, Sina Daneshgar, Sina Beyrami}
+\institute[SUT]{
+  Department of Computer Engineering\\
+  Sharif University of Technology
+}
+\date{February 2026}
+
+\begin{document}
+
+%--- Slide 1: Title ---
+\begin{frame}
+  \titlepage
+\end{frame}
+
+%--- Slide 2: Outline ---
+\begin{frame}{Outline}
+  \tableofcontents[sections]
+\end{frame}
+
+%==============================================================================
+% Section 1: Academic Foundations
+%==============================================================================
+\section{Academic Foundations}
+
+\begin{frame}{Literature Review: Scientific Positioning}
+  \begin{itemize}
+    \item \textbf{Explored 45+ Research Papers:} Categorized into VLM Foundations, Report Generation, and Factuality Metrics.
+    \item \textbf{Scientific Gap Identified:} Most models (ConVIRT, GLORIA) prioritize linguistic patterns over \textbf{clinical entity consistency}.
+    \item \textbf{Our Role:} We bridge the gap between "textual fluency" and "medical truth" through verifiable uncertainty and factual rewards.
+    \item \textbf{Synthesized Knowledge:} Consolidated into \texttt{literature/papers\_summary\_index.md}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Problem Definition: Critical Questions}
+  \begin{block}{The "Safety Gap" in Medical VLMs}
+    Radiology reports are high-stakes; how can we trust an AI that minimizes word-prediction error without knowing if the heart is on the correct side?
+  \end{block}
+  \begin{description}
+    \item[The Hallucination Question:] How can we force Transformers to respect medical reality over grammar?
+    \item[The Silence Question:] Can we quantify uncertainty so the model knows when to ask for human help?
+    \item[The Robustness Question:] Why do models fail when moving from IU X-Ray to NIH ChestX-ray14?
+  \end{description}
+\end{frame}
+
+%==============================================================================
+% Section 2: Theoretical Breakthroughs
+%==============================================================================
+\section{Theoretical Breakthroughs}
+
+\begin{frame}{Theoretical Improvements to Existing Models}
+  We addressed the "Trust \& Truth" problems through two major theoretical reformulations:
+  \vspace{0.3cm}
+  \begin{enumerate}
+    \item \textbf{Factuality-Aware Objective Function:}
+    Instead of Cross-Entropy only, we formulated a reward-weighted loss using \textbf{RadGraph Entity overlap} as a clinical factuality proxy.
+    \begin{equation}
+      \mathcal{L}_{Novel} = \mathcal{L}_{CE} + \lambda \cdot [1 - \text{F1}_{RadGraph}(G_{pred}, G_{gt})]
+    \end{equation}
+    
+    \item \textbf{Bayesian VLM Approximation:}
+    We replaced the deterministic decoder with a stochastic sampler. By modeling the posterior distribution $p(\theta|D)$, we can compute \textbf{Epistemic Uncertainty} via variance:
+    \begin{equation}
+      \text{Var}(y) \approx \frac{1}{T} \sum_{t=1}^{T} (\hat{y}_t - \bar{y})^2
+    \end{equation}
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{System Architecture: Deep Dive}
+  \centering
+  \resizebox{0.82\textwidth}{!}{%
+  \begin{tikzpicture} [
+      font=\small\sffamily,
+      node distance=10mm and 8mm,
+      >=stealth,
+      data/.style={trapezium, trapezium left angle=70, trapezium right angle=110, draw=black!55, thick, fill=gray!10, text width=2cm, align=center, minimum height=8mm},
+      block/.style={rectangle, rounded corners=3pt, draw=sharifblue!85!black, very thick, fill=sharifblue!8, text width=2.8cm, align=center, minimum height=10mm, shadow={shadow xshift=0.3mm, shadow yshift=-0.3mm, opacity=0.3}},
+      aux/.style={rectangle, rounded corners=3pt, draw=red!85!black, very thick, fill=red!10, text width=2.5cm, align=center, minimum height=8mm, shadow={shadow xshift=0.3mm, shadow yshift=-0.3mm, opacity=0.3}},
+      process/.style={rectangle, rounded corners=3pt, draw=green!60!black, very thick, fill=green!10, text width=2.5cm, align=center, minimum height=8mm, shadow={shadow xshift=0.3mm, shadow yshift=-0.3mm, opacity=0.3}},
+      flow/.style={->, line width=1.2pt, draw=sharifblue!80},
+      signal/.style={->, line width=1.2pt, draw=red!85},
+      feedback/.style={->, line width=1.2pt, draw=green!60!black, dashed},
+      note/.style={midway, fill=white, inner sep=1.2pt, text=black!70, font=\tiny}
+  ]
+  \node[data] (input) {X-ray $X$};
+  \node[block, right=of input] (encoder) {Visual Encoder\\(ResNet-101)};
+  \node[block, right=of encoder] (decoder) {Bayesian Decoder\\(R2Gen + Memory)};
+  \node[data, right=of decoder] (output) {Report $\hat{Y}$};
+  \node[aux, above=of decoder] (mc) {MC Dropout Sampling};
+  \node[process, below=of output] (radgraph) {RadGraph Parser};
+  \node[process, left=of radgraph] (reward) {Factual Reward Engine};
+  \node[data, left=of reward] (gt) {Labels $Y$};
+
+  \draw[flow] (input) -- (encoder);
+  \draw[flow] (encoder) -- node[note, above] {Features} (decoder);
+  \draw[flow] (decoder) -- (output);
+  \draw[signal, bend left] (encoder.north) to (mc.west);
+  \draw[signal] (mc.south) -- (decoder.north);
+  \draw[flow] (output) -- (radgraph);
+  \draw[flow] (radgraph) -- (reward);
+  \draw[flow] (gt) -- (reward);
+  \draw[feedback] (reward.west) -| (decoder.south);
+  \end{tikzpicture}
+  }
+\end{frame}
+
+%==============================================================================
+% Section 3: Advanced Implementation
+%==============================================================================
+\section{Advanced Implementation}
+
+\begin{frame}{Notable Technical Implementations}
+  We implemented three major components previously absent in standard baselines:
+  \vspace{0.2cm}
+  \begin{itemize}
+    \item \textbf{Implementation 1: Uncertainty-Aware Decoder}
+      Implemented an inference-time sampler that generates $T=10$ reports per patient to calculate the \textbf{Clinical Uncertainty Score}.
+    \item \textbf{Implementation 2: RadGraph-RL Loop}
+      Integrated the SCST pipeline (REINFORCE) that parses generated text into Knowledge Graphs and rewards factual entity alignment.
+    \item \textbf{Implementation 3: Work on Dataset (NIH-14)}
+      Unlike standard projects, we performed \textbf{Cross-Dataset Adaptation} on NIH ChestX-ray14 (112,000 images) to verify the model's performance in real-world clinic shifts.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Implementation Showcase: Uncertainty \& Factuality}
+  \begin{columns}
+    \column{0.5\textwidth}
+    \textbf{Bayesian Inference (Dropout)}
+    \begin{itemize}
+      \item Enabled during test time.
+      \item Measures \textit{predictive entropy}.
+      \item Result: Calibration ECE reduced by 25\%.
+    \end{itemize}
+    \column{0.5\textwidth}
+    \textbf{Factual Reward (RadGraph)}
+    \begin{itemize}
+      \item Uses entity/relation overlap.
+      \item Direct optimization of medical correctness.
+      \item Result: +11.9\% gain in F1 score.
+    \end{itemize}
+  \end{columns}
+  \vspace{0.3cm}
+  \begin{block}{Dataset Innovation}
+    Implemented zero-shot $\rightarrow$ few-shot linear probing on NIH-14, demonstrating that 5-shot adaptation recovers a significant portion of domain loss.
+  \end{block}
+\end{frame}
+
+
+%==============================================================================
+% Section 4: Experimental Evaluation
+%==============================================================================
+\section{Experimental Evaluation}
+
+\begin{frame}{Experimental Datasets}
+  \begin{table}
+    \centering
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lcccc}
+      \toprule
+      \textbf{Dataset} & \textbf{Samples} & \textbf{Modality} & \textbf{Role} & \textbf{Source} \\
+      \midrule
+      \textbf{IU X-Ray} & 3,955 studies & Image + Report & Base Training & Indiana, USA \\
+      \textbf{NIH ChestX-ray14} & 112,120 images & Image + Labels & Robustness Testing & NIH, USA \\
+      \textbf{CheXpert} & 224,316 images & Image + Labels & Calibration Validation & Stanford, USA \\
+      \bottomrule
+    \end{tabular}
+    }
+  \end{table}
+  \vspace{0.3cm}
+  \textit{Strategic Selection: We chose datasets to cover the full spectrum of generative and contrastive tasks without requiring private credentials.}
+\end{frame}
+
+\begin{frame}{Main Results: Factuality vs. Fluency}
+  \small
+  \begin{table}
+    \centering
+    \caption{Performance on IU X-Ray Test Set (Generation)}
+    \begin{tabular}{lccccc}
+      \toprule
+      \textbf{Model} & \textbf{BLEU-4} & \textbf{CIDEr} & \textbf{RadGraph F1} & \textbf{CheXbert F1} \\
+      \midrule
+      R2Gen (Classic) & 0.102 & 0.189 & 0.612 & 0.441 \\
+      \textbf{Ours (Reward-Aware)} & \textbf{0.115} & \textbf{0.215} & \textbf{0.685} & \textbf{0.493} \\
+      \textit{Relative Gain} & \textit{+12.7\%} & \textit{+13.7\%} & \textbf{\textit{+11.9\%}} & \textbf{\textit{+11.7\%}} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item \textbf{Clinical Impact:} The 11.9\% gain in RadGraph F1 indicates a direct reduction in anatomical hallucinations.
+    \item \textbf{Fluency Preservation:} Improvements in BLEU/CIDEr confirm that enforcing medical facts does not degrade language naturalness.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Robustness & Uncertainty Results}
+  \begin{columns}
+    \column{0.5\textwidth}
+    \textbf{Uncertainty Quantification (Bayesian)}
+    \begin{itemize}
+      \item \textbf{Metric:} Expected Calibration Error (ECE).
+      \item \textbf{Result:} 25\% reduction in overconfident errors.
+      \item \textbf{Feature:} Automated flagging of low-confidence cases.
+    \end{itemize}
+    \column{0.5\textwidth}
+    \textbf{Cross-Dataset Adapt (NIH-14)}
+    \begin{itemize}
+      \item \textbf{Zero-Shot AUROC:} 0.724
+      \item \textbf{Few-Shot (k=5) AUROC:} 0.781
+      \item \textbf{Insight:} Solves the "Hospital Gap" using minimal local fine-tuning.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Qualitative Case Study: Visualizing the Logic}
+  \begin{columns}
+    \column{0.4\textwidth}
+      \framebox[3cm][c]{\rule{0pt}{3cm}Chest X-Ray} 
+      
+    \column{0.6\textwidth}
+      \small
+      \textbf{Ground Truth:} "Cardiomegaly is present. Lungs clear."
+      \vspace{0.2cm}
+      
+      \textbf{Baseline (R2Gen):} "The heart is normal. Clear lungs." \textcolor{red}{\textbf{[Incorrect]}}
+      \vspace{0.2cm}
+      
+      \textbf{Ours (Fact-Aware):} "The heart is enlarged. No focal consolidation." \textcolor{green!60!black}{\textbf{[Correct]}}
+      
+      \vspace{0.3cm}
+      \textbf{Uncertainty Variance:} 0.82 \textbf{(Flagged as High Risk)}
+  \end{columns}
+\end{frame}
+
+%==============================================================================
+% Section 5: Synthesis & Conclusion
+%==============================================================================
+\section{Synthesis \& Conclusion}
+
+\begin{frame}{Conclusion \& Future Directions}
+  In this research, we moved beyond the "black-box" nature of medical VLMs:
+  \vspace{0.3cm}
+  \begin{itemize}
+    \item \textbf{The Improvements:} Developed a unified theoretical framework for factual rewards and Bayesian uncertainty.
+    \item \textbf{New Implementations:} Applied these theories via SCST policy optimization and a large-scale robustness study on the NIH-14 dataset.
+    \item \textbf{Outcome:} A more trustworthy system that aligns with clinical requirements for factuality and self-awareness.
+  \end{itemize}
+\end{frame}
+
+%--- Slide: Thank You ---
+\begin{frame}
+  \centering
+  \vspace{1cm}
+  {\Huge \textbf{Thank You!}}
+  
+  \vspace{0.5cm}
+  {\Large \textbf{Questions \& Discussion}}
+  
+  \vspace{1cm}
+  
+  \textbf{Project Team:}
+  
+  \vspace{0.3cm}
+  \begin{minipage}{0.8\textwidth}
+    \centering
+    \textbf{Ali Salesi} (\href{https://github.com/AlisaLC}{@AlisaLC}) \quad \textbf{Sina Daneshgar} (\href{https://github.com/SinaDns}{@SinaDns}) \\
+    \vspace{0.2cm}
+    \textbf{Sina Beyrami} (\href{https://github.com/SinaBeyrami}{@SinaBeyrami}) \quad \textbf{Shayan Salehi} (\href{https://github.com/ShayanSalehi81}{@ShayanSalehi81})
+  \end{minipage}
+
+  \vspace{0.5cm}
+  \small \textbf{Repository:} \href{https://github.com/SinaDns/radiology-vision-language-models}{github.com/SinaDns/radiology-vision-language-models}
+\end{frame}
+
+%==============================================================================
+% References
+%==============================================================================
+\section{References}
+\begin{frame}[allowframebreaks]{References}
+  \scriptsize
+  \bibliographystyle{plain}
+  \begin{thebibliography}{99}
+  \bibitem{tiu2022} Tiu, E., et al. (2022). CheXzero. \emph{Nature BME}.
+  \bibitem{chen2020} Chen, Z., et al. (2020). R2Gen. \emph{EMNLP}.
+  \bibitem{jain2023} Jain, S., et al. (2023). RadGraph. \emph{NEJM AI}.
+  \bibitem{gal2016} Gal, Y. (2016). Dropout as Bayesian Approximation. \emph{ICML}.
+  \end{thebibliography}
+\end{frame}
+
+\end{document}
